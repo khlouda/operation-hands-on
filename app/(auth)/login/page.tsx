@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { login } from '@/lib/firebase/auth'
+import { login, getAppUser } from '@/lib/firebase/auth'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -18,9 +18,9 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      await login(email, password)
-      // Always go to dashboard — dashboard will redirect instructors to /instructor
-      router.push('/dashboard')
+      const firebaseUser = await login(email, password)
+      const appUser = await getAppUser(firebaseUser.uid)
+      router.push(appUser?.role === 'instructor' ? '/instructor' : '/dashboard')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''
       if (msg.includes('invalid-credential') || msg.includes('wrong-password') || msg.includes('user-not-found')) {

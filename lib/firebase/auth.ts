@@ -49,8 +49,8 @@ export async function register({
     createdAt: Date.now(),
   }
 
-  // Step 2 — save profile to Firestore in background (don't block login on it)
-  createUser(user).catch(err => console.warn('Firestore profile save failed:', err))
+  // Step 2 — save profile to Firestore
+  await createUser(user)
 
   // Step 3 — set auth cookie and proceed
   const token = await credential.user.getIdToken()
