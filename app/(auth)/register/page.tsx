@@ -31,6 +31,7 @@ export default function RegisterPage() {
   const [subjectInterests, setSubjectInterests] = useState<SubjectSlug[]>([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadingMsg, setLoadingMsg] = useState('')
 
   const toggleSubject = (slug: SubjectSlug) => {
     setSubjectInterests(prev =>
@@ -55,10 +56,10 @@ export default function RegisterPage() {
   const handleSubmit = async () => {
     setError('')
     setLoading(true)
+    setLoadingMsg('Creating account…')
     try {
-      console.log('Step 1: starting registration...')
-      await register({ email, password, displayName, role, avatarColor, subjectInterests })
-      console.log('Step 2: registration done, redirecting...')
+      await register({ email, password, displayName, role, avatarColor, subjectInterests }, setLoadingMsg)
+      setLoadingMsg('Redirecting…')
       router.push(role === 'instructor' ? '/instructor' : '/dashboard')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -259,7 +260,7 @@ export default function RegisterPage() {
             disabled={loading}
             className="w-full py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
           >
-            {loading ? 'Creating account…' : '✓ Create Account'}
+            {loading ? loadingMsg : '✓ Create Account'}
           </button>
         </>
       )}

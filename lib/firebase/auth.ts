@@ -24,17 +24,18 @@ function clearAuthCookie() {
   document.cookie = 'auth-token=; path=/; max-age=0'
 }
 
-export async function register({
-  email, password, displayName, role, avatarColor, subjectInterests,
-}: {
-  email: string
-  password: string
-  displayName: string
-  role: UserRole
-  avatarColor: string
-  subjectInterests: SubjectSlug[]
-}): Promise<AppUser> {
-  // Step 1 — create Firebase Auth account
+export async function register(
+  { email, password, displayName, role, avatarColor, subjectInterests }: {
+    email: string
+    password: string
+    displayName: string
+    role: UserRole
+    avatarColor: string
+    subjectInterests: SubjectSlug[]
+  },
+  onProgress?: (msg: string) => void
+): Promise<AppUser> {
+  onProgress?.('Creating account…')
   const credential = await createUserWithEmailAndPassword(auth(), email, password)
   await updateProfile(credential.user, { displayName })
 
@@ -49,14 +50,14 @@ export async function register({
     createdAt: Date.now(),
   }
 
-  // Step 2 — save profile via server-side API (avoids browser Firestore SDK issues)
+  onProgress?.('Saving profile…')
   await fetch('/api/users/create', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(user),
   })
 
-  // Step 3 — set auth cookie and proceed
+  onProgress?.('Almost done…')
   const token = await credential.user.getIdToken()
   setAuthCookie(token)
   return user
