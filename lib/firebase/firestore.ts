@@ -11,14 +11,25 @@ import {
   limit,
   addDoc,
   getFirestore,
+  initializeFirestore,
+  memoryLocalCache,
 } from 'firebase/firestore'
 import { app } from './config'
 import type { Scenario, Session, Team, Submission, AppUser } from '@/lib/types'
 
-// Lazy getter — only initializes when first called at runtime, not at build time
+// Use memory cache to avoid IndexedDB hang on first browser connection
+let _db: ReturnType<typeof getFirestore> | null = null
+
 function db() {
   if (!app) throw new Error('Firebase not configured — add environment variables')
-  return getFirestore(app)
+  if (!_db) {
+    try {
+      _db = initializeFirestore(app, { localCache: memoryLocalCache() })
+    } catch {
+      _db = getFirestore(app)
+    }
+  }
+  return _db
 }
 
 // ─── USERS ───────────────────────────────────────────────────────────────────
