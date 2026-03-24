@@ -53,7 +53,14 @@ export async function register({
     createdAt: Date.now(),
   }
 
-  await createUser(user)
+  // Save profile to Firestore with a 10s timeout so we don't hang forever
+  await Promise.race([
+    createUser(user),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Firestore timeout — check database security rules')), 10000)
+    ),
+  ])
+
   const token = await credential.user.getIdToken()
   setAuthCookie(token)
   return user
