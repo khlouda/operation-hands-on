@@ -8,7 +8,7 @@ import {
 } from 'firebase/auth'
 import { getAuth } from 'firebase/auth'
 import { app } from './config'
-import { createUser, getUser } from './firestore'
+import { getUser } from './firestore'
 import type { AppUser, UserRole, SubjectSlug } from '@/lib/types'
 
 function auth() {
@@ -49,8 +49,12 @@ export async function register({
     createdAt: Date.now(),
   }
 
-  // Step 2 — save profile to Firestore
-  await createUser(user)
+  // Step 2 — save profile via server-side API (avoids browser Firestore SDK issues)
+  await fetch('/api/users/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(user),
+  })
 
   // Step 3 — set auth cookie and proceed
   const token = await credential.user.getIdToken()
