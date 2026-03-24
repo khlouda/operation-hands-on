@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { login, getAppUser } from '@/lib/firebase/auth'
+import { login } from '@/lib/firebase/auth'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -18,9 +18,10 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const firebaseUser = await login(email, password)
-      const appUser = await getAppUser(firebaseUser.uid)
-      router.push(appUser?.role === 'instructor' ? '/instructor' : '/dashboard')
+      await login(email, password)
+      // Use stored role for instant redirect — Firestore profile loads in background
+      const role = localStorage.getItem('userRole')
+      router.push(role === 'instructor' ? '/instructor' : '/dashboard')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''
       if (msg.includes('invalid-credential') || msg.includes('wrong-password') || msg.includes('user-not-found')) {

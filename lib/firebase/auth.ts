@@ -50,14 +50,17 @@ export async function register(
     createdAt: Date.now(),
   }
 
-  onProgress?.('Saving profile…')
-  await fetch('/api/users/create', {
+  // Save profile in background — don't block registration on it
+  onProgress?.('Finishing up…')
+  fetch('/api/users/create', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(user),
-  })
+  }).catch(err => console.warn('Profile save failed:', err))
 
-  onProgress?.('Almost done…')
+  // Store role in localStorage so we can redirect correctly without Firestore
+  localStorage.setItem('userRole', role)
+  localStorage.setItem('displayName', displayName)
   const token = await credential.user.getIdToken()
   setAuthCookie(token)
   return user
