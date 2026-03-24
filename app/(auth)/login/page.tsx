@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { login } from '@/lib/firebase/auth'
-import { getUser } from '@/lib/firebase/firestore'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -19,16 +18,11 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const firebaseUser = await login(email, password)
-      const appUser = await getUser(firebaseUser.uid)
-      // Route based on role
-      if (appUser?.role === 'instructor') {
-        router.push('/instructor')
-      } else {
-        router.push('/dashboard')
-      }
+      await login(email, password)
+      // Always go to dashboard — dashboard will redirect instructors to /instructor
+      router.push('/dashboard')
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Login failed'
+      const msg = err instanceof Error ? err.message : ''
       if (msg.includes('invalid-credential') || msg.includes('wrong-password') || msg.includes('user-not-found')) {
         setError('Incorrect email or password')
       } else if (msg.includes('too-many-requests')) {
@@ -74,7 +68,7 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
             <span className="text-red-400 text-sm">{error}</span>
           </div>
         )}
