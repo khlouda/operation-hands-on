@@ -8,8 +8,14 @@ import { getSessionByCode } from '@/lib/firebase/firestore'
 import { SUBJECTS } from '@/constants/subjects'
 
 export default function StudentDashboard() {
-  const { appUser } = useAuth()
+  const { appUser, loading } = useAuth()
   const router = useRouter()
+
+  // If not loading and still no user, send to login
+  if (!loading && !appUser) {
+    router.push('/login')
+    return null
+  }
   const [accessCode, setAccessCode] = useState('')
   const [joining, setJoining] = useState(false)
   const [joinError, setJoinError] = useState('')
@@ -49,6 +55,7 @@ export default function StudentDashboard() {
       </div>
     )
   }
+
 
   return (
     <div className="min-h-screen bg-[#0f1117]">
