@@ -56,15 +56,18 @@ export default function RegisterPage() {
     setError('')
     setLoading(true)
     try {
+      console.log('Step 1: starting registration...')
       await register({ email, password, displayName, role, avatarColor, subjectInterests })
+      console.log('Step 2: registration done, redirecting...')
       router.push(role === 'instructor' ? '/instructor' : '/dashboard')
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : ''
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('Registration error:', msg)
       if (msg.includes('email-already-in-use')) {
         setError('An account with this email already exists')
         setStep(1)
       } else {
-        setError('Registration failed. Please try again.')
+        setError(msg || 'Registration failed. Please try again.')
       }
     } finally {
       setLoading(false)
