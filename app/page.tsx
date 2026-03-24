@@ -21,16 +21,16 @@ export default function HomePage() {
         </p>
         <div className="flex gap-4 mt-10">
           <Link
-            href="/instructor"
+            href="/login"
             className="px-6 py-3 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-500 transition-colors"
           >
-            Instructor Dashboard
+            Sign In
           </Link>
           <Link
-            href="/dashboard"
+            href="/register"
             className="px-6 py-3 text-sm font-semibold text-slate-300 bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700"
           >
-            Student Login
+            Create Account
           </Link>
         </div>
       </section>
