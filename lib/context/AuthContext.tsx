@@ -22,28 +22,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    // Lazy import so Firebase never blocks the initial page render
     let unsub: (() => void) | undefined
 
     import('@/lib/firebase/auth').then(({ onAuthChange, getAppUser }) => {
       unsub = onAuthChange(async user => {
         setFirebaseUser(user)
+
         if (user) {
           try {
-            const profile = await getAppUser(user.uid)
-            setAppUser(profile)
+            // Try Firestore profile, but fall back to basic Firebase Auth data
+            const profile = await Promise.race([
+              getAppUser(user.uid),
+              new Promise<null>(resolve => setTimeout(() => resolve(null), 5000)),
+            ])
+
+            if (profile) {
+              setAppUser(profile)
+            } else {
+              // Firestore slow/unavailable — build minimal profile from Auth data
+              setAppUser({
+                uid: user.uid,
+                email: user.email ?? '',
+                displayName: user.displayName ?? 'User',
+                role: 'student',
+                avatarColor: '#3b82f6',
+                university: 'ECPI University',
+                subjectInterests: [],
+                createdAt: Date.now(),
+              })
+            }
           } catch {
-            // Profile fetch failed — still let the user through
+            setAppUser(null)
           }
         } else {
           setAppUser(null)
         }
+
         setLoading(false)
       })
-    }).catch(() => {
-      // Firebase failed to load entirely — don't block the app
-      setLoading(false)
-    })
+    }).catch(() => setLoading(false))
 
     return () => unsub?.()
   }, [])

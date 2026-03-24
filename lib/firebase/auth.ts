@@ -16,21 +16,16 @@ function auth() {
   return getAuth(app)
 }
 
-// Set a simple cookie so Next.js middleware can check auth state
 function setAuthCookie(token: string) {
   document.cookie = `auth-token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
 }
+
 function clearAuthCookie() {
   document.cookie = 'auth-token=; path=/; max-age=0'
 }
 
 export async function register({
-  email,
-  password,
-  displayName,
-  role,
-  avatarColor,
-  subjectInterests,
+  email, password, displayName, role, avatarColor, subjectInterests,
 }: {
   email: string
   password: string
@@ -39,6 +34,7 @@ export async function register({
   avatarColor: string
   subjectInterests: SubjectSlug[]
 }): Promise<AppUser> {
+  // Step 1 — create Firebase Auth account
   const credential = await createUserWithEmailAndPassword(auth(), email, password)
   await updateProfile(credential.user, { displayName })
 
@@ -53,14 +49,10 @@ export async function register({
     createdAt: Date.now(),
   }
 
-  // Save profile to Firestore with a 10s timeout so we don't hang forever
-  await Promise.race([
-    createUser(user),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Firestore timeout — check database security rules')), 10000)
-    ),
-  ])
+  // Step 2 — save profile to Firestore in background (don't block login on it)
+  createUser(user).catch(err => console.warn('Firestore profile save failed:', err))
 
+  // Step 3 — set auth cookie and proceed
   const token = await credential.user.getIdToken()
   setAuthCookie(token)
   return user
