@@ -125,7 +125,7 @@ export async function generateScenario(
   params: GenerationParams
 ): Promise<ScenarioGenerationResult> {
   const message = await client.messages.create({
-    model: 'claude-sonnet-4-5',
+    model: 'claude-sonnet-4-6',
     max_tokens: 8000,
     system: buildSystemPrompt(),
     messages: [{ role: 'user', content: buildUserPrompt(params) }],
@@ -168,7 +168,7 @@ export async function* generateScenarioStream(
   let fullText = ''
 
   const stream = await client.messages.stream({
-    model: 'claude-sonnet-4-5',
+    model: 'claude-sonnet-4-6',
     max_tokens: 8000,
     system: buildSystemPrompt(),
     messages: [{ role: 'user', content: buildUserPrompt(params) }],
