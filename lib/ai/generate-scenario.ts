@@ -88,7 +88,7 @@ Return a JSON object with this exact structure:
       "scenarioId": "",
       "name": "filename.log",
       "type": "log",
-      "content": "Full realistic file content here. For logs: use real log format with real-looking timestamps and data.",
+      "content": "Realistic file content, max 20 lines. For logs: real format, real-looking timestamps.",
       "isDistractor": false,
       "unlockCondition": null
     }
@@ -110,13 +110,13 @@ Return a JSON object with this exact structure:
 }
 
 Requirements:
-- Generate 3-5 progressive tasks (each task unlocks understanding needed for the next)
-- Generate 3-5 evidence files (mix of useful and 1-2 distractors, set isDistractor: true)
-- Generate 3 inject events that fire at different times (20, 40, 65 minutes work well for ${params.timeLimit}min sessions)
-- Make one inject unlock a new resource
+- Generate exactly 3 progressive tasks (each task unlocks understanding needed for the next)
+- Generate exactly 3 evidence files (2 useful, 1 distractor with isDistractor: true), max 20 lines of content each
+- Generate exactly 2 inject events at different times
 - Task points should total around ${Math.round(params.timeLimit * 5)} points
 - For task types: use "flag" for finding a specific value, "text" for analysis/explanation, "command" for terminal tasks
-- Correct answers for flag tasks should be specific (e.g. "192.0.2.47", "2024-03-15 03:42:17", "CVE-2024-1234")`
+- Correct answers for flag tasks should be specific (e.g. "192.0.2.47", "2024-03-15 03:42:17", "CVE-2024-1234")
+- Be concise — quality over length. Short story (2 paragraphs), short task descriptions (2-3 sentences each)`
 }
 
 // ─── JSON CLEANER ─────────────────────────────────────────────────────────────
@@ -165,7 +165,7 @@ export async function generateScenario(
 ): Promise<ScenarioGenerationResult> {
   const message = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 6000,
+    max_tokens: 4000,
     system: buildSystemPrompt(),
     messages: [{ role: 'user', content: buildUserPrompt(params) }],
   })
