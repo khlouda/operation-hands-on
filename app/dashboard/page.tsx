@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
 import { logout } from '@/lib/firebase/auth'
@@ -10,22 +10,14 @@ import { SUBJECTS } from '@/constants/subjects'
 export default function StudentDashboard() {
   const { appUser, loading } = useAuth()
   const router = useRouter()
-
-  // Redirect instructors to their dashboard
-  if (appUser?.role === 'instructor') {
-    router.push('/instructor')
-    return null
-  }
-
-  // If not loading and still no user, send to login
-  if (!loading && !appUser) {
-    router.push('/login')
-    return null
-  }
-
   const [accessCode, setAccessCode] = useState('')
   const [joining, setJoining] = useState(false)
   const [joinError, setJoinError] = useState('')
+
+  useEffect(() => {
+    if (!loading && !appUser) router.push('/login')
+    if (appUser?.role === 'instructor') router.push('/instructor')
+  }, [appUser, loading, router])
 
   const handleLogout = async () => {
     await logout()
@@ -36,17 +28,10 @@ export default function StudentDashboard() {
     e.preventDefault()
     setJoinError('')
     setJoining(true)
-
     try {
       const session = await getSessionByCode(accessCode.toUpperCase().trim())
-      if (!session) {
-        setJoinError('Session not found. Check your access code.')
-        return
-      }
-      if (session.status === 'ended') {
-        setJoinError('This session has already ended.')
-        return
-      }
+      if (!session) { setJoinError('Session not found. Check your access code.'); return }
+      if (session.status === 'ended') { setJoinError('This session has already ended.'); return }
       router.push(`/session/${session.id}/lobby`)
     } catch {
       setJoinError('Something went wrong. Try again.')
@@ -55,50 +40,73 @@ export default function StudentDashboard() {
     }
   }
 
-  if (!appUser) {
+  if (loading || !appUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-[#0f1117] flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
       </div>
     )
   }
 
+  const mySubjects = SUBJECTS.filter(s => appUser.subjectInterests.includes(s.slug))
+  const firstName = appUser.displayName.split(' ')[0]
 
   return (
     <div className="min-h-screen bg-[#0f1117]">
+
       {/* Nav */}
-      <nav className="border-b border-slate-800 px-6 h-14 flex items-center justify-between max-w-7xl mx-auto">
-        <span className="text-sm font-bold text-white">
-          Operation <span className="text-blue-400">Hands-On</span>
-        </span>
-        <div className="flex items-center gap-3">
-          <div
-            className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold"
-            style={{ backgroundColor: appUser.avatarColor }}
-          >
-            {appUser.displayName.charAt(0).toUpperCase()}
+      <nav className="border-b border-slate-800 sticky top-0 z-50 bg-[#0f1117]/95 backdrop-blur">
+        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+          <span className="text-sm font-bold text-white tracking-tight">
+            Operation <span className="text-blue-400">Hands-On</span>
+          </span>
+          <div className="flex items-center gap-3">
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+              style={{ backgroundColor: appUser.avatarColor }}
+            >
+              {appUser.displayName.charAt(0).toUpperCase()}
+            </div>
+            <span className="text-sm text-slate-300 hidden sm:block">{appUser.displayName}</span>
+            <button
+              onClick={handleLogout}
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-800"
+            >
+              Sign out
+            </button>
           </div>
-          <span className="text-sm text-slate-300">{appUser.displayName}</span>
-          <button
-            onClick={handleLogout}
-            className="text-xs text-slate-500 hover:text-slate-300 transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-800"
-          >
-            Sign out
-          </button>
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto px-6 py-10">
-        {/* Welcome */}
-        <div className="mb-10">
-          <h1 className="text-2xl font-bold text-white">
-            Welcome back, {appUser.displayName.split(' ')[0]} 👋
-          </h1>
-          <p className="text-slate-400 mt-1">Ready for your next challenge?</p>
+      <div className="max-w-5xl mx-auto px-6 py-10 space-y-10">
+
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-white">Welcome back, {firstName}</h1>
+          <p className="text-slate-400 mt-1 text-sm">Ready for your next challenge?</p>
         </div>
 
-        {/* Join session — the main action */}
-        <div className="p-6 rounded-2xl bg-blue-600/10 border border-blue-500/30 mb-10">
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: 'Sessions Completed', value: '0', icon: '🎯', sub: 'Join one below' },
+            { label: 'Best Score', value: '—', icon: '🏆', sub: 'No sessions yet' },
+            { label: 'Hints Used', value: '—', icon: '💡', sub: 'Fewer = more points' },
+            { label: 'Rank', value: '—', icon: '📊', sub: 'Complete a session' },
+          ].map(stat => (
+            <div key={stat.label} className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-slate-500 text-xs font-medium uppercase tracking-wider">{stat.label}</span>
+                <span className="text-lg">{stat.icon}</span>
+              </div>
+              <p className="text-2xl font-bold text-white">{stat.value}</p>
+              <p className="text-xs text-slate-500 mt-1">{stat.sub}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Join Session */}
+        <div className="p-6 rounded-2xl bg-blue-600/10 border border-blue-500/30">
           <h2 className="text-lg font-semibold text-white mb-1">Join a Session</h2>
           <p className="text-slate-400 text-sm mb-5">
             Enter the 6-character access code your instructor gave you
@@ -121,43 +129,54 @@ export default function StudentDashboard() {
               {joining ? 'Joining…' : 'Join →'}
             </button>
           </form>
-          {joinError && (
-            <p className="text-red-400 text-sm mt-3">{joinError}</p>
-          )}
+          {joinError && <p className="text-red-400 text-sm mt-3">{joinError}</p>}
         </div>
 
-        {/* Subject interests */}
-        {appUser.subjectInterests.length > 0 && (
+        {/* Active sessions placeholder */}
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-700/50">
+            <h2 className="text-sm font-semibold text-white">Active Sessions</h2>
+          </div>
+          <div className="flex flex-col items-center justify-center py-12 text-center px-6">
+            <div className="w-10 h-10 rounded-xl bg-slate-700/50 flex items-center justify-center text-xl mb-3">🔒</div>
+            <p className="text-sm text-slate-400">No active sessions assigned to you</p>
+            <p className="text-xs text-slate-600 mt-1">Your instructor will give you an access code when a session is ready</p>
+          </div>
+        </div>
+
+        {/* Subjects */}
+        {mySubjects.length > 0 && (
           <div>
-            <h2 className="text-xs font-medium tracking-wider uppercase text-slate-500 mb-4">
-              Your Subjects
-            </h2>
+            <h2 className="text-xs font-semibold tracking-widest uppercase text-slate-500 mb-4">Your Subjects</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {SUBJECTS
-                .filter(s => appUser.subjectInterests.includes(s.slug))
-                .map(subject => (
+              {mySubjects.map(subject => (
+                <div
+                  key={subject.id}
+                  className="flex items-center gap-3 p-4 rounded-xl bg-slate-800/50 border border-slate-700/50"
+                >
                   <div
-                    key={subject.id}
-                    className="flex items-center gap-3 p-4 rounded-xl bg-slate-800/50 border border-slate-700/50"
+                    className="w-9 h-9 rounded-lg flex items-center justify-center text-lg flex-shrink-0"
+                    style={{ backgroundColor: subject.color + '20', border: `1px solid ${subject.color}40` }}
                   >
-                    <span className="text-2xl">{subject.icon}</span>
-                    <div>
-                      <p className="text-sm font-medium text-slate-200">{subject.name}</p>
-                      <p className="text-xs text-slate-500">{subject.topics.length} topics</p>
-                    </div>
+                    {subject.icon}
                   </div>
-                ))}
+                  <div>
+                    <p className="text-sm font-medium text-slate-200">{subject.name}</p>
+                    <p className="text-xs text-slate-500">{subject.topics.length} topics</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {appUser.subjectInterests.length === 0 && (
-          <div className="text-center py-16 text-slate-600">
-            <div className="text-4xl mb-3">🎯</div>
-            <p className="text-sm">No active sessions yet.</p>
-            <p className="text-sm">Enter an access code above to join one.</p>
+        {mySubjects.length === 0 && (
+          <div className="text-center py-10 text-slate-600">
+            <div className="text-3xl mb-3">🎯</div>
+            <p className="text-sm">Enter an access code above to join a session.</p>
           </div>
         )}
+
       </div>
     </div>
   )
