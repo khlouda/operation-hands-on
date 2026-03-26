@@ -119,6 +119,45 @@ Requirements:
 - Correct answers for flag tasks should be specific (e.g. "192.0.2.47", "2024-03-15 03:42:17", "CVE-2024-1234")`
 }
 
+// ─── JSON CLEANER ─────────────────────────────────────────────────────────────
+
+function cleanAndParseJson(raw: string): ScenarioGenerationResult['scenario'] {
+  // 1. Strip markdown fences if present
+  let text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
+
+  // 2. Extract the outermost JSON object
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start !== -1 && end !== -1) text = text.slice(start, end + 1)
+
+  // 3. Try direct parse first
+  try { return JSON.parse(text) } catch { /* continue to repair */ }
+
+  // 4. Repair common issues:
+  //    a. Remove trailing commas before ] or }
+  text = text.replace(/,(\s*[}\]])/g, '$1')
+  //    b. Replace literal tab characters inside strings (break JSON)
+  text = text.replace(/\t/g, '\\t')
+  //    c. Replace unescaped control chars inside strings
+  text = text.replace(/[\x00-\x1F\x7F]/g, c => {
+    const code = c.charCodeAt(0).toString(16).padStart(4, '0')
+    return `\\u${code}`
+  })
+
+  // 5. Try again after repair
+  try { return JSON.parse(text) } catch { /* continue */ }
+
+  // 6. Last resort: truncate at last complete top-level field and close the object
+  //    This handles cases where Claude ran out of tokens mid-string
+  const safeEnd = text.lastIndexOf(',"injectEvents"')
+  if (safeEnd > 0) {
+    const truncated = text.slice(0, safeEnd) + ',"injectEvents":[]}'
+    try { return JSON.parse(truncated) } catch { /* continue */ }
+  }
+
+  throw new Error(`JSON parse failed. First 200 chars: ${text.slice(0, 200)}`)
+}
+
 // ─── MAIN GENERATION FUNCTION ─────────────────────────────────────────────────
 
 export async function generateScenario(
@@ -126,36 +165,20 @@ export async function generateScenario(
 ): Promise<ScenarioGenerationResult> {
   const message = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 8000,
+    max_tokens: 12000,
     system: buildSystemPrompt(),
     messages: [{ role: 'user', content: buildUserPrompt(params) }],
   })
 
   const content = message.content[0]
-  if (content.type !== 'text') {
-    throw new Error('Unexpected response type from Claude API')
-  }
+  if (content.type !== 'text') throw new Error('Unexpected response type from Claude API')
 
-  let parsed: ScenarioGenerationResult['scenario']
-  try {
-    parsed = JSON.parse(content.text)
-  } catch {
-    // Try to extract JSON from the response if there's extra text
-    const match = content.text.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error('Could not parse JSON from Claude response')
-    parsed = JSON.parse(match[0])
-  }
+  const parsed = cleanAndParseJson(content.text)
 
   // Stamp scenarioId placeholders — will be filled when saved to Firestore
-  if (parsed.tasks) {
-    parsed.tasks = parsed.tasks.map(t => ({ ...t, scenarioId: '' }))
-  }
-  if (parsed.resources) {
-    parsed.resources = parsed.resources.map(r => ({ ...r, scenarioId: '' }))
-  }
-  if (parsed.injectEvents) {
-    parsed.injectEvents = parsed.injectEvents.map(e => ({ ...e, scenarioId: '' }))
-  }
+  if (parsed.tasks) parsed.tasks = parsed.tasks.map(t => ({ ...t, scenarioId: '' }))
+  if (parsed.resources) parsed.resources = parsed.resources.map(r => ({ ...r, scenarioId: '' }))
+  if (parsed.injectEvents) parsed.injectEvents = parsed.injectEvents.map(e => ({ ...e, scenarioId: '' }))
 
   return { scenario: parsed }
 }
@@ -169,7 +192,7 @@ export async function* generateScenarioStream(
 
   const stream = await client.messages.stream({
     model: 'claude-sonnet-4-6',
-    max_tokens: 8000,
+    max_tokens: 12000,
     system: buildSystemPrompt(),
     messages: [{ role: 'user', content: buildUserPrompt(params) }],
   })
@@ -184,14 +207,6 @@ export async function* generateScenarioStream(
     }
   }
 
-  let parsed: ScenarioGenerationResult['scenario']
-  try {
-    parsed = JSON.parse(fullText)
-  } catch {
-    const match = fullText.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error('Could not parse JSON from Claude stream')
-    parsed = JSON.parse(match[0])
-  }
-
+  const parsed = cleanAndParseJson(fullText)
   return { scenario: parsed }
 }
