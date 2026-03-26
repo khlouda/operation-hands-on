@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
 import { getSession, getScenario, createSubmission } from '@/lib/firebase/firestore'
-import type { Session, Scenario, Task, Resource } from '@/lib/types'
+import { markTaskComplete, pushEvent, setMemberOnline, sendChatMessage, onChatChange } from '@/lib/firebase/rtdb'
+import LiveLeaderboard from '@/components/shared/LiveLeaderboard'
+import type { Session, Scenario, Task, Resource, ChatMessage } from '@/lib/types'
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
@@ -232,31 +234,52 @@ function FileViewer({ resource, onClose }: { resource: Resource; onClose: () => 
   )
 }
 
-// ─── RIGHT: TEAM CHAT ────────────────────────────────────────────────────────
+// ─── RIGHT: TEAM CHAT (RTDB) ─────────────────────────────────────────────────
 
-function TeamChat({ teamName, displayName }: { teamName: string; displayName: string }) {
+function TeamChat({
+  sessionId, uid, displayName, avatarColor,
+}: {
+  sessionId: string
+  uid: string
+  displayName: string
+  avatarColor: string
+}) {
   const [msg, setMsg] = useState('')
-  const [messages, setMessages] = useState([
-    { id: '1', from: 'System', text: 'Session started. Good luck!', time: 'now' },
-  ])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
 
-  const send = () => {
+  useEffect(() => {
+    const unsub = onChatChange(sessionId, data => {
+      const msgs = Object.entries(data).map(([id, m]) => ({ ...m, id })) as ChatMessage[]
+      msgs.sort((a, b) => (a.sentAt ?? 0) - (b.sentAt ?? 0))
+      setMessages(msgs.slice(-50))
+    })
+    return unsub
+  }, [sessionId])
+
+  const send = async () => {
     if (!msg.trim()) return
-    setMessages(m => [...m, { id: Date.now().toString(), from: displayName, text: msg.trim(), time: 'now' }])
+    const text = msg.trim()
     setMsg('')
+    await sendChatMessage(sessionId, {
+      teamId: uid, userId: uid, displayName, avatarColor, message: text, sentAt: Date.now(),
+    })
   }
 
   return (
     <div className="flex flex-col h-full">
       <div className="px-3 py-2.5 border-b border-slate-700/50 flex-shrink-0">
-        <p className="text-xs font-semibold text-slate-300">{teamName}</p>
-        <p className="text-xs text-slate-600">Team chat</p>
+        <p className="text-xs font-semibold text-slate-300">Session Chat</p>
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {messages.map(m => (
-          <div key={m.id}>
-            <p className="text-xs font-medium text-slate-400">{m.from}</p>
-            <p className="text-xs text-slate-300">{m.text}</p>
+        {messages.length === 0 && (
+          <p className="text-xs text-slate-600 text-center pt-4">No messages yet</p>
+        )}
+        {messages.map((m, i) => (
+          <div key={i}>
+            <p className="text-xs font-medium" style={{ color: m.avatarColor ?? '#94a3b8' }}>
+              {m.displayName ?? 'Unknown'}
+            </p>
+            <p className="text-xs text-slate-300">{m.message}</p>
           </div>
         ))}
       </div>
@@ -296,7 +319,7 @@ export default function WorkspacePage() {
   const [score, setScore] = useState(0)
 
   useEffect(() => {
-    if (!id) return
+    if (!id || !appUser) return
     const load = async () => {
       try {
         const s = await getSession(id)
@@ -305,12 +328,23 @@ export default function WorkspacePage() {
         const sc = await getScenario(s.scenarioId)
         setScenario(sc)
         if (sc?.tasks?.length) setActiveTaskId(sc.tasks[0].id)
+
+        // Register player in RTDB
+        setMemberOnline(id, appUser.uid, appUser.uid, true).catch(() => {})
+        pushEvent(id, {
+          type: 'player_joined',
+          teamId: appUser.uid,
+          teamName: appUser.displayName,
+          teamColor: appUser.avatarColor,
+          payload: {},
+        }).catch(() => {})
       } finally {
         setLoading(false)
       }
     }
     load()
-  }, [id, router])
+    return () => { setMemberOnline(id, appUser.uid, appUser.uid, false).catch(() => {}) }
+  }, [id, appUser, router])
 
   const handleSubmit = async (answer: string) => {
     if (!scenario || !activeTaskId || !appUser || !session) return
@@ -335,14 +369,34 @@ export default function WorkspacePage() {
 
     if (isCorrect) {
       setLastResult('correct')
-      setScore(s => s + task.points)
-      setCompletedTaskIds(prev => [...prev, activeTaskId])
-      // auto-advance to next task
+      const newScore = score + task.points
+      const newCompleted = [...completedTaskIds, activeTaskId]
+      setScore(newScore)
+      setCompletedTaskIds(newCompleted)
+
+      // Sync to RTDB
+      markTaskComplete(id, appUser.uid, activeTaskId, newScore).catch(() => {})
+      pushEvent(id, {
+        type: 'task_complete',
+        teamId: appUser.uid,
+        teamName: appUser.displayName,
+        teamColor: appUser.avatarColor,
+        payload: { taskTitle: task.title, points: task.points },
+      }).catch(() => {})
+
+      // Auto-advance to next task
       const idx = scenario.tasks.findIndex(t => t.id === activeTaskId)
       const next = scenario.tasks[idx + 1]
       if (next) setTimeout(() => { setActiveTaskId(next.id); setLastResult(null) }, 1200)
     } else {
       setLastResult('wrong')
+      pushEvent(id, {
+        type: 'wrong_answer',
+        teamId: appUser.uid,
+        teamName: appUser.displayName,
+        teamColor: appUser.avatarColor,
+        payload: { taskTitle: task.title },
+      }).catch(() => {})
     }
     setSubmitting(false)
   }
@@ -463,17 +517,24 @@ export default function WorkspacePage() {
 
         {/* RIGHT PANEL */}
         <div className="w-56 flex-shrink-0 border-l border-slate-800 flex flex-col overflow-hidden">
-          {/* Mini leaderboard */}
+          {/* Score */}
           <div className="border-b border-slate-800 p-3 flex-shrink-0">
-            <p className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Your Score</p>
+            <p className="text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wider">Your Score</p>
             <p className="text-2xl font-bold text-yellow-400">{score}</p>
-            <p className="text-xs text-slate-600 mt-0.5">{completedTaskIds.length} tasks done</p>
+            <p className="text-xs text-slate-600 mt-0.5">{completedTaskIds.length}/{scenario?.tasks?.length ?? 0} tasks</p>
+          </div>
+          {/* Live leaderboard */}
+          <div className="border-b border-slate-800 p-3 flex-shrink-0">
+            <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">Live Rankings</p>
+            <LiveLeaderboard sessionId={id} currentUserId={appUser?.uid} compact />
           </div>
           {/* Chat */}
           <div className="flex-1 overflow-hidden">
             <TeamChat
-              teamName="Your Team"
+              sessionId={id}
+              uid={appUser?.uid ?? ''}
               displayName={appUser?.displayName ?? 'You'}
+              avatarColor={appUser?.avatarColor ?? '#3b82f6'}
             />
           </div>
         </div>

@@ -236,7 +236,7 @@ export interface LiveTeam {
 }
 
 export interface LiveEvent {
-  type: 'task_complete' | 'hint_used' | 'inject_fired' | 'wrong_answer' | 'session_start' | 'session_end'
+  type: 'task_complete' | 'hint_used' | 'inject_fired' | 'wrong_answer' | 'session_start' | 'session_end' | 'player_joined'
   teamId: string
   teamName: string
   teamColor: string

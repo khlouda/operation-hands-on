@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { getSession, getScenario, updateSession } from '@/lib/firebase/firestore'
-import type { Session, Scenario } from '@/lib/types'
+import { onTeamsChange, onEventsChange, startLiveSession } from '@/lib/firebase/rtdb'
+import LiveLeaderboard from '@/components/shared/LiveLeaderboard'
+import type { Session, Scenario, LiveTeam, LiveEvent } from '@/lib/types'
 
 export default function SessionMonitor() {
   const { id } = useParams<{ id: string }>()
@@ -13,6 +15,8 @@ export default function SessionMonitor() {
   const [scenario, setScenario] = useState<Scenario | null>(null)
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
+  const [liveTeams, setLiveTeams] = useState<Record<string, LiveTeam>>({})
+  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([])
 
   useEffect(() => {
     if (!id) return
@@ -28,6 +32,15 @@ export default function SessionMonitor() {
       }
     }
     load()
+
+    // Subscribe to live RTDB data
+    const unsubTeams = onTeamsChange(id, setLiveTeams)
+    const unsubEvents = onEventsChange(id, data => {
+      const events = Object.values(data) as LiveEvent[]
+      events.sort((a, b) => b.timestamp - a.timestamp)
+      setLiveEvents(events.slice(0, 30))
+    })
+    return () => { unsubTeams(); unsubEvents() }
   }, [id])
 
   const handleStart = async () => {
@@ -35,6 +48,7 @@ export default function SessionMonitor() {
     setStarting(true)
     try {
       await updateSession(id, { status: 'active', startedAt: Date.now() })
+      await startLiveSession(id).catch(() => {})
       setSession(prev => prev ? { ...prev, status: 'active', startedAt: Date.now() } : null)
     } finally {
       setStarting(false)
@@ -201,19 +215,60 @@ export default function SessionMonitor() {
           </div>
         </div>
 
-        {/* Teams (empty state — will populate as teams join) */}
-        <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-white">Teams</h2>
-            <span className="text-xs text-slate-500">0 teams joined</span>
+        {/* Live players + leaderboard */}
+        <div className="grid md:grid-cols-2 gap-4">
+
+          <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white">Live Leaderboard</h2>
+              <span className="text-xs text-slate-500">{Object.keys(liveTeams).length} players</span>
+            </div>
+            <div className="p-4">
+              {Object.keys(liveTeams).length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-slate-500">No players yet</p>
+                  <p className="text-xs text-slate-600 mt-1">
+                    Share code <span className="font-mono font-bold text-slate-400">{session.accessCode}</span>
+                  </p>
+                </div>
+              ) : (
+                <LiveLeaderboard sessionId={id} />
+              )}
+            </div>
           </div>
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="text-3xl mb-3">👥</div>
-            <p className="text-sm text-slate-400 mb-1">No teams have joined yet</p>
-            <p className="text-xs text-slate-600">
-              Students join by entering code <span className="font-mono font-bold text-slate-400">{session.accessCode}</span> on their dashboard
-            </p>
+
+          {/* Live activity feed */}
+          <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-700/50">
+              <h2 className="text-sm font-semibold text-white">Live Activity</h2>
+            </div>
+            <div className="divide-y divide-slate-700/30 overflow-y-auto max-h-64">
+              {liveEvents.length === 0 ? (
+                <div className="text-center py-8 text-slate-600 text-xs">No activity yet</div>
+              ) : liveEvents.map((e, i) => (
+                <div key={i} className="px-4 py-2.5 flex items-start gap-2">
+                  <span className="text-base flex-shrink-0">
+                    {e.type === 'task_complete' ? '✅' :
+                     e.type === 'wrong_answer' ? '❌' :
+                     e.type === 'hint_used' ? '💡' :
+                     '⚡'}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs text-slate-300">
+                      <span className="font-medium" style={{ color: e.teamColor }}>{e.teamName}</span>
+                      {' '}
+                      {e.type === 'task_complete' ? `completed a task (+${(e.payload?.points as number) ?? 0} pts)` :
+                       e.type === 'wrong_answer' ? 'submitted a wrong answer' :
+                       e.type === 'hint_used' ? 'used a hint' :
+                       'triggered an event'}
+                    </p>
+                    <p className="text-xs text-slate-600">{new Date(e.timestamp).toLocaleTimeString()}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
+
         </div>
 
         {/* Task list */}
