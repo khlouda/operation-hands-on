@@ -345,14 +345,40 @@ function Step4({
         body: JSON.stringify(params),
       })
 
-      if (!res.ok) {
-        const err = await res.json()
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => ({}))
         throw new Error(err.error ?? 'Generation failed')
       }
 
-      const data = await res.json()
-      setStatus('done')
-      onComplete(data.scenario)
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const payload = line.slice(6).trim()
+          if (!payload) continue
+
+          const msg = JSON.parse(payload)
+          if (msg.type === 'chunk') {
+            setStreamText(t => t + msg.text)
+          } else if (msg.type === 'done') {
+            setStatus('done')
+            onComplete(msg.scenario)
+            return
+          } else if (msg.type === 'error') {
+            throw new Error(msg.message ?? 'Generation failed')
+          }
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
       setStatus('error')
@@ -391,14 +417,20 @@ function Step4({
             <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
             <span className="text-xs text-blue-400 font-medium">AI is writing…</span>
           </div>
-          <div className="space-y-1">
-            {['Crafting story narrative', 'Designing progressive tasks', 'Creating evidence files', 'Writing inject events', 'Generating hints & scoring'].map((step, i) => (
-              <div key={step} className="flex items-center gap-2 text-xs text-slate-500">
-                <div className="w-1.5 h-1.5 rounded-full bg-slate-600" />
-                {step}
-              </div>
-            ))}
-          </div>
+          {streamText ? (
+            <pre className="text-xs text-slate-400 whitespace-pre-wrap break-all max-h-48 overflow-hidden font-mono leading-relaxed">
+              {streamText.slice(-600)}
+            </pre>
+          ) : (
+            <div className="space-y-1">
+              {['Crafting story narrative', 'Designing progressive tasks', 'Creating evidence files', 'Writing inject events', 'Generating hints & scoring'].map((step) => (
+                <div key={step} className="flex items-center gap-2 text-xs text-slate-500">
+                  <div className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                  {step}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     )

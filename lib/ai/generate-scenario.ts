@@ -121,7 +121,7 @@ Requirements:
 
 // ─── JSON CLEANER ─────────────────────────────────────────────────────────────
 
-function cleanAndParseJson(raw: string): ScenarioGenerationResult['scenario'] {
+export function cleanAndParseJson(raw: string): ScenarioGenerationResult['scenario'] {
   // 1. Strip markdown fences if present
   let text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
 

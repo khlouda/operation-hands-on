@@ -1,81 +1,64 @@
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
 
 import { NextRequest, NextResponse } from 'next/server'
-import { generateScenario } from '@/lib/ai/generate-scenario'
+import { generateScenarioStream } from '@/lib/ai/generate-scenario'
 import { createScenario } from '@/lib/firebase/firestore'
 import type { GenerationParams } from '@/lib/types'
 
+// Streaming POST — keeps connection alive so Vercel's 10s limit doesn't kill it
 export async function POST(req: NextRequest) {
+  let params: GenerationParams
   try {
-    const params: GenerationParams = await req.json()
-
-    // Basic validation
-    if (!params.subject || !params.topic || !params.difficulty) {
-      return NextResponse.json({ error: 'Missing required fields: subject, topic, difficulty' }, { status: 400 })
-    }
-    if (!params.answers || Object.keys(params.answers).length < 5) {
-      return NextResponse.json({ error: 'Must provide answers to all 5 questions' }, { status: 400 })
-    }
-
-    // Generate via Claude
-    const result = await generateScenario(params)
-
-    // Generate a temp ID immediately so we don't block on Firestore
-    const tempId = `scenario_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-
-    // Save to Firestore in the background — don't block the response
-    createScenario({
-      ...result.scenario,
-      subjectId: params.subject,
-      topicId: params.topic,
-      createdBy: params.answers._instructorId ?? 'unknown',
-      timesUsed: 0,
-      avgScore: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    }).then(id => {
-      console.log('[generate-scenario] Firestore saved, id:', id)
-    }).catch(err => {
-      console.error('[generate-scenario] Firestore save failed (non-fatal):', err)
-    })
-
-    // Return immediately with temp ID — client gets the scenario right away
-    return NextResponse.json({ scenarioId: tempId, scenario: { ...result.scenario, id: tempId } })
-  } catch (err) {
-    console.error('[generate-scenario]', err)
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Generation failed' },
-      { status: 500 }
-    )
-  }
-}
-
-// Streaming endpoint
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const paramsStr = searchParams.get('params')
-  if (!paramsStr) {
-    return NextResponse.json({ error: 'Missing params' }, { status: 400 })
+    params = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const params: GenerationParams = JSON.parse(paramsStr)
+  if (!params.subject || !params.topic || !params.difficulty) {
+    return NextResponse.json({ error: 'Missing required fields: subject, topic, difficulty' }, { status: 400 })
+  }
+  if (!params.answers || Object.keys(params.answers).length < 5) {
+    return NextResponse.json({ error: 'Must provide answers to all 5 questions' }, { status: 400 })
+  }
 
   const encoder = new TextEncoder()
+
   const stream = new ReadableStream({
     async start(controller) {
+      const send = (obj: object) =>
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`))
+
       try {
-        const { generateScenarioStream } = await import('@/lib/ai/generate-scenario')
+        let fullText = ''
         const gen = generateScenarioStream(params)
+
         for await (const chunk of gen) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ chunk })}\n\n`))
+          fullText += chunk
+          send({ type: 'chunk', text: chunk })
         }
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-        controller.close()
+
+        // Parse the accumulated JSON
+        const { cleanAndParseJson } = await import('@/lib/ai/generate-scenario')
+        const scenario = cleanAndParseJson(fullText)
+        const tempId = `scenario_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        const finalScenario = { ...scenario, id: tempId }
+
+        // Save to Firestore in background
+        createScenario({
+          ...scenario,
+          subjectId: params.subject,
+          topicId: params.topic,
+          createdBy: params.answers._instructorId ?? 'unknown',
+          timesUsed: 0,
+          avgScore: 0,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }).catch(err => console.error('[generate-scenario] Firestore save failed:', err))
+
+        send({ type: 'done', scenarioId: tempId, scenario: finalScenario })
       } catch (err) {
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ error: String(err) })}\n\n`)
-        )
+        send({ type: 'error', message: err instanceof Error ? err.message : 'Generation failed' })
+      } finally {
         controller.close()
       }
     },
