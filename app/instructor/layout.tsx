@@ -27,7 +27,10 @@ export default function InstructorLayout({ children }: { children: React.ReactNo
               Dashboard
             </Link>
             <Link href="/instructor/create" className="text-sm text-slate-400 hover:text-white transition-colors">
-              Create Scenario
+              Create
+            </Link>
+            <Link href="/instructor/analytics" className="text-sm text-slate-400 hover:text-white transition-colors">
+              Analytics
             </Link>
           </div>
 
