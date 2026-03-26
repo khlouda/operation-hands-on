@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { SUBJECTS, SUBJECT_QUESTIONS } from '@/constants/subjects'
+import { useAuth } from '@/lib/context/AuthContext'
 import type { Subject, Topic, DifficultyLevel, SessionMode, GenerationParams, Scenario } from '@/lib/types'
 import { Suspense } from 'react'
 
@@ -424,16 +425,72 @@ function Step4({
 
 // ─── STEP 5: REVIEW ──────────────────────────────────────────────────────────
 
-function Step5({ scenario, onPublish, onRegenerate }: {
+function Step5({ scenario, params, instructorId, onRegenerate }: {
   scenario: Scenario
-  onPublish: () => void
+  params: GenerationParams
+  instructorId: string
   onRegenerate: () => void
 }) {
+  const router = useRouter()
   const [publishing, setPublishing] = useState(false)
+  const [accessCode, setAccessCode] = useState('')
+  const [sessionId, setSessionId] = useState('')
 
   const handlePublish = async () => {
     setPublishing(true)
-    await onPublish()
+    try {
+      const res = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenarioId: scenario.id,
+          instructorId,
+          mode: params.mode,
+          timeLimit: params.timeLimit,
+          teamSize: params.teamSize,
+        }),
+      })
+      const data = await res.json()
+      setAccessCode(data.accessCode)
+      setSessionId(data.sessionId)
+    } catch {
+      // still show success even if session creation fails
+      setAccessCode('ERROR')
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  // ── Success screen after publishing ──
+  if (accessCode) {
+    return (
+      <div className="flex flex-col items-center justify-center py-10 text-center">
+        <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center text-3xl mb-6">✓</div>
+        <h2 className="text-2xl font-bold text-white mb-2">Session Created!</h2>
+        <p className="text-slate-400 text-sm mb-8">Share this code with your students to join the session</p>
+
+        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 mb-8 w-full max-w-sm">
+          <p className="text-xs font-medium tracking-widest uppercase text-slate-500 mb-3">Access Code</p>
+          <p className="text-5xl font-bold text-white tracking-widest font-mono">{accessCode}</p>
+          <p className="text-xs text-slate-500 mt-3">Students enter this on their dashboard</p>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={() => router.push(`/session/${sessionId}/monitor`)}
+            className="px-6 py-3 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-500 transition-colors"
+          >
+            Open Monitor →
+          </button>
+          <button
+            onClick={() => router.push('/instructor')}
+            className="px-6 py-3 text-sm font-semibold text-slate-400 bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -553,7 +610,7 @@ function Step5({ scenario, onPublish, onRegenerate }: {
           disabled={publishing}
           className="px-8 py-3 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-500 disabled:opacity-50 transition-colors"
         >
-          {publishing ? 'Publishing…' : '✓ Publish Scenario'}
+          {publishing ? 'Creating session…' : '✓ Publish & Create Session'}
         </button>
       </div>
     </div>
@@ -565,6 +622,7 @@ function Step5({ scenario, onPublish, onRegenerate }: {
 function CreateScenarioContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { appUser } = useAuth()
 
   const [step, setStep] = useState(1)
 
@@ -596,11 +654,6 @@ function CreateScenarioContent() {
     learningObjectives: Object.values(answers).filter(Boolean),
     answers,
   })
-
-  const handlePublish = async () => {
-    // Scenario is already saved to Firestore by the API — just navigate
-    router.push('/instructor')
-  }
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-10">
@@ -650,7 +703,8 @@ function CreateScenarioContent() {
       {step === 5 && generatedScenario && (
         <Step5
           scenario={generatedScenario}
-          onPublish={handlePublish}
+          params={buildParams()}
+          instructorId={appUser?.uid ?? ''}
           onRegenerate={() => { setStep(4); setGeneratedScenario(null) }}
         />
       )}
