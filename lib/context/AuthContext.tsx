@@ -39,12 +39,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (profile) {
               setAppUser(profile)
             } else {
-              // Firestore slow/unavailable — build minimal profile from Auth data
+              // Firestore slow/unavailable — build minimal profile from Auth + localStorage
+              const storedRole = (typeof window !== 'undefined' && localStorage.getItem('userRole')) as import('@/lib/types').UserRole | null
               setAppUser({
                 uid: user.uid,
                 email: user.email ?? '',
                 displayName: user.displayName ?? 'User',
-                role: 'student',
+                role: storedRole ?? 'student',
                 avatarColor: '#3b82f6',
                 university: 'ECPI University',
                 subjectInterests: [],
