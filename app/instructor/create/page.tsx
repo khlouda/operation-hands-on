@@ -483,6 +483,24 @@ function Step5({ scenario, params, instructorId, onRegenerate }: {
         }),
       })
       const data = await res.json()
+
+      // Cache session + scenario locally so monitor page can load without Firestore
+      const sessionData = {
+        id: data.sessionId,
+        scenarioId: scenario.id,
+        instructorId,
+        mode: params.mode,
+        timeLimit: params.timeLimit,
+        teamSize: params.teamSize,
+        accessCode: data.accessCode,
+        status: 'waiting',
+        teamIds: [],
+      }
+      try {
+        sessionStorage.setItem(`session_${data.sessionId}`, JSON.stringify(sessionData))
+        sessionStorage.setItem(`scenario_${scenario.id}`, JSON.stringify(scenario))
+      } catch { /* storage unavailable */ }
+
       setAccessCode(data.accessCode)
       setSessionId(data.sessionId)
     } catch {

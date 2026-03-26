@@ -26,10 +26,18 @@ export default function SessionMonitor() {
     if (!id) return
     const load = async () => {
       try {
-        const s = await getSession(id)
+        let s = await getSession(id).catch(() => null)
+        if (!s) {
+          // Firestore unavailable — try local cache
+          try { s = JSON.parse(sessionStorage.getItem(`session_${id}`) ?? 'null') } catch { /* ignore */ }
+        }
         if (!s) return
         setSession(s)
-        const sc = await getScenario(s.scenarioId)
+
+        let sc = await getScenario(s.scenarioId).catch(() => null)
+        if (!sc) {
+          try { sc = JSON.parse(sessionStorage.getItem(`scenario_${s.scenarioId}`) ?? 'null') } catch { /* ignore */ }
+        }
         setScenario(sc)
       } finally {
         setLoading(false)
