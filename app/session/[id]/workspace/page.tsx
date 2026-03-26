@@ -6,6 +6,8 @@ import { useAuth } from '@/lib/context/AuthContext'
 import { getSession, getScenario, createSubmission } from '@/lib/firebase/firestore'
 import { markTaskComplete, pushEvent, setMemberOnline, sendChatMessage, onChatChange } from '@/lib/firebase/rtdb'
 import LiveLeaderboard from '@/components/shared/LiveLeaderboard'
+import SessionTimer from '@/components/shared/SessionTimer'
+import InjectEventCard from '@/components/shared/InjectEventCard'
 import type { Session, Scenario, Task, Resource, ChatMessage } from '@/lib/types'
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -428,7 +430,8 @@ export default function WorkspacePage() {
             {scenario.difficulty}
           </span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <SessionTimer sessionId={id} initialSeconds={session.timeLimit * 60} />
           <div className="flex items-center gap-1.5 text-xs text-slate-400">
             <span>Score:</span>
             <span className="font-bold text-yellow-400">{score}</span>
@@ -540,6 +543,9 @@ export default function WorkspacePage() {
         </div>
 
       </div>
+
+      {/* Inject event card — slides in from right */}
+      <InjectEventCard sessionId={id} />
     </div>
   )
 }

@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { getSession, getScenario, updateSession } from '@/lib/firebase/firestore'
-import { onTeamsChange, onEventsChange, startLiveSession } from '@/lib/firebase/rtdb'
+import { onTeamsChange, onEventsChange, startLiveSession, markInjectFired } from '@/lib/firebase/rtdb'
 import LiveLeaderboard from '@/components/shared/LiveLeaderboard'
-import type { Session, Scenario, LiveTeam, LiveEvent } from '@/lib/types'
+import SessionTimer from '@/components/shared/SessionTimer'
+import type { Session, Scenario, LiveTeam, LiveEvent, InjectEvent } from '@/lib/types'
 
 export default function SessionMonitor() {
   const { id } = useParams<{ id: string }>()
@@ -17,6 +18,9 @@ export default function SessionMonitor() {
   const [starting, setStarting] = useState(false)
   const [liveTeams, setLiveTeams] = useState<Record<string, LiveTeam>>({})
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([])
+  const [firedInjects, setFiredInjects] = useState<Set<string>>(new Set())
+  const [customInject, setCustomInject] = useState({ title: '', content: '' })
+  const [firingInject, setFiringInject] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -52,6 +56,38 @@ export default function SessionMonitor() {
       setSession(prev => prev ? { ...prev, status: 'active', startedAt: Date.now() } : null)
     } finally {
       setStarting(false)
+    }
+  }
+
+  const fireInject = async (inject: InjectEvent) => {
+    setFiringInject(true)
+    try {
+      await markInjectFired(id, inject.id)
+      setFiredInjects(prev => new Set([...prev, inject.id]))
+    } finally {
+      setFiringInject(false)
+    }
+  }
+
+  const fireCustomInject = async () => {
+    if (!customInject.title.trim()) return
+    setFiringInject(true)
+    try {
+      const customId = `custom_${Date.now()}`
+      await markInjectFired(id, customId)
+      // Write full inject data so the card renders correctly
+      const { ref, set, getDatabase } = await import('firebase/database')
+      const db = getDatabase()
+      await set(ref(db, `sessions/${id}/firedInjects/${customId}`), {
+        id: customId,
+        title: customInject.title,
+        content: customInject.content,
+        scoreImpact: 0,
+        firedAt: Date.now(),
+      })
+      setCustomInject({ title: '', content: '' })
+    } finally {
+      setFiringInject(false)
     }
   }
 
@@ -97,6 +133,14 @@ export default function SessionMonitor() {
           </span>
         </div>
         <div className="flex items-center gap-3">
+          {session.status === 'active' && (
+            <SessionTimer
+              sessionId={id}
+              initialSeconds={session.timeLimit * 60}
+              isInstructor
+              onExpire={() => updateSession(id, { status: 'ended', endedAt: Date.now() })}
+            />
+          )}
           <div className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-lg">
             <span className="text-xs text-slate-500">Code:</span>
             <span className="font-mono font-bold text-white tracking-widest text-sm">{session.accessCode}</span>
@@ -270,6 +314,81 @@ export default function SessionMonitor() {
           </div>
 
         </div>
+
+        {/* Inject Events */}
+        {(scenario.injectEvents?.length > 0 || true) && (
+          <div className="grid md:grid-cols-2 gap-4">
+
+            {/* Predefined injects */}
+            {scenario.injectEvents?.length > 0 && (
+              <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-700/50">
+                  <h2 className="text-sm font-semibold text-white">Inject Events</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Fire surprise events to all students</p>
+                </div>
+                <div className="divide-y divide-slate-700/30">
+                  {scenario.injectEvents.map(inject => {
+                    const fired = firedInjects.has(inject.id)
+                    return (
+                      <div key={inject.id} className="px-5 py-3 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium truncate ${fired ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
+                            {inject.title}
+                          </p>
+                          <p className="text-xs text-slate-600">
+                            {inject.triggerType === 'time' ? `at ${inject.triggerTime}min` : inject.triggerType}
+                            {inject.scoreImpact !== 0 && ` · ${inject.scoreImpact > 0 ? '+' : ''}${inject.scoreImpact}pts`}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => fireInject(inject)}
+                          disabled={fired || firingInject || session.status !== 'active'}
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 border border-orange-500/30 flex-shrink-0"
+                        >
+                          {fired ? '✓ Fired' : '⚡ Fire'}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Custom inject */}
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-700/50">
+                <h2 className="text-sm font-semibold text-white">Custom Inject</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Send a surprise message on the fly</p>
+              </div>
+              <div className="p-5 space-y-3">
+                <input
+                  value={customInject.title}
+                  onChange={e => setCustomInject(p => ({ ...p, title: e.target.value }))}
+                  placeholder="Title (e.g. 'Breaking: second server compromised')"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-orange-500"
+                />
+                <textarea
+                  rows={3}
+                  value={customInject.content}
+                  onChange={e => setCustomInject(p => ({ ...p, content: e.target.value }))}
+                  placeholder="Details of what happened…"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-orange-500 resize-none"
+                />
+                <button
+                  onClick={fireCustomInject}
+                  disabled={!customInject.title.trim() || firingInject || session.status !== 'active'}
+                  className="w-full py-2.5 bg-orange-600 text-white text-sm font-semibold rounded-lg hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  ⚡ Fire Custom Inject
+                </button>
+                {session.status !== 'active' && (
+                  <p className="text-xs text-slate-600 text-center">Start the session to fire injects</p>
+                )}
+              </div>
+            </div>
+
+          </div>
+        )}
 
         {/* Task list */}
         <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
