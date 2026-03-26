@@ -30,7 +30,9 @@ export async function POST(req: NextRequest) {
 
     const accessCode = generateAccessCode()
 
-    const sessionId = await createSession({
+    const tempSessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+
+    createSession({
       scenarioId,
       instructorId,
       mode: mode ?? 'competitive',
@@ -39,9 +41,13 @@ export async function POST(req: NextRequest) {
       teamIds: [],
       settings,
       accessCode,
+    }).then(id => {
+      console.log('[sessions/create] Firestore saved, id:', id)
+    }).catch(err => {
+      console.error('[sessions/create] Firestore save failed (non-fatal):', err)
     })
 
-    return NextResponse.json({ sessionId, accessCode })
+    return NextResponse.json({ sessionId: tempSessionId, accessCode })
   } catch (err) {
     console.error('[sessions/create]', err)
     return NextResponse.json({ error: 'Failed to create session' }, { status: 500 })

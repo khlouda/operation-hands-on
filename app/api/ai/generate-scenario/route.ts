@@ -20,8 +20,11 @@ export async function POST(req: NextRequest) {
     // Generate via Claude
     const result = await generateScenario(params)
 
-    // Save to Firestore
-    const scenarioId = await createScenario({
+    // Generate a temp ID immediately so we don't block on Firestore
+    const tempId = `scenario_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+
+    // Save to Firestore in the background — don't block the response
+    createScenario({
       ...result.scenario,
       subjectId: params.subject,
       topicId: params.topic,
@@ -30,10 +33,14 @@ export async function POST(req: NextRequest) {
       avgScore: 0,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+    }).then(id => {
+      console.log('[generate-scenario] Firestore saved, id:', id)
+    }).catch(err => {
+      console.error('[generate-scenario] Firestore save failed (non-fatal):', err)
     })
 
-    // Stamp the scenario ID into nested objects
-    return NextResponse.json({ scenarioId, scenario: { ...result.scenario, id: scenarioId } })
+    // Return immediately with temp ID — client gets the scenario right away
+    return NextResponse.json({ scenarioId: tempId, scenario: { ...result.scenario, id: tempId } })
   } catch (err) {
     console.error('[generate-scenario]', err)
     return NextResponse.json(
