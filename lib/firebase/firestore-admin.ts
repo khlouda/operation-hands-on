@@ -44,6 +44,10 @@ export async function adminGetSessionByCode(accessCode: string): Promise<Session
   return snap.docs[0].data() as Session
 }
 
+export async function adminUpdateSession(id: string, data: Partial<Session>): Promise<void> {
+  await adminDb().collection('sessions').doc(id).update(data)
+}
+
 export async function adminGetSessionsByInstructor(instructorId: string): Promise<Session[]> {
   const snap = await adminDb()
     .collection('sessions')
