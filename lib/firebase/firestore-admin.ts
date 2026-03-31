@@ -43,3 +43,23 @@ export async function adminGetSessionByCode(accessCode: string): Promise<Session
   if (snap.empty) return null
   return snap.docs[0].data() as Session
 }
+
+export async function adminGetSessionsByInstructor(instructorId: string): Promise<Session[]> {
+  const snap = await adminDb()
+    .collection('sessions')
+    .where('instructorId', '==', instructorId)
+    .orderBy('__name__', 'desc')
+    .limit(20)
+    .get()
+  return snap.docs.map(d => d.data() as Session)
+}
+
+export async function adminGetScenariosByInstructor(instructorId: string): Promise<Scenario[]> {
+  const snap = await adminDb()
+    .collection('scenarios')
+    .where('createdBy', '==', instructorId)
+    .orderBy('__name__', 'desc')
+    .limit(20)
+    .get()
+  return snap.docs.map(d => d.data() as Scenario)
+}

@@ -39,14 +39,20 @@ export default function SessionMonitor() {
     }
     load()
 
-    // Subscribe to live RTDB data
-    const unsubTeams = onTeamsChange(id, setLiveTeams)
-    const unsubEvents = onEventsChange(id, data => {
-      const events = Object.values(data) as LiveEvent[]
-      events.sort((a, b) => b.timestamp - a.timestamp)
-      setLiveEvents(events.slice(0, 30))
-    })
-    return () => { unsubTeams(); unsubEvents() }
+    // Subscribe to live RTDB data (guard against missing databaseURL env var)
+    let unsubTeams: (() => void) | undefined
+    let unsubEvents: (() => void) | undefined
+    try {
+      unsubTeams = onTeamsChange(id, setLiveTeams)
+      unsubEvents = onEventsChange(id, data => {
+        const events = Object.values(data) as LiveEvent[]
+        events.sort((a, b) => b.timestamp - a.timestamp)
+        setLiveEvents(events.slice(0, 30))
+      })
+    } catch (e) {
+      console.error('[monitor] RTDB unavailable:', e)
+    }
+    return () => { unsubTeams?.(); unsubEvents?.() }
   }, [id])
 
   const handleStart = async () => {

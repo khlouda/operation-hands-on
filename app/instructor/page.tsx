@@ -1,19 +1,40 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
 import { SUBJECTS } from '@/constants/subjects'
-
-const STATS = [
-  { label: 'Scenarios Created', value: '0', icon: '📋', sub: 'Get started below' },
-  { label: 'Sessions Launched', value: '0', icon: '🚀', sub: 'No sessions yet' },
-  { label: 'Students Trained', value: '0', icon: '🎓', sub: 'Waiting for first session' },
-  { label: 'Avg Completion', value: '—', icon: '📈', sub: 'No data yet' },
-]
+import type { Session, Scenario } from '@/lib/types'
 
 export default function InstructorDashboard() {
   const { appUser } = useAuth()
+  const router = useRouter()
   const firstName = appUser?.displayName?.split(' ')[0] ?? 'Instructor'
+
+  const [sessions, setSessions] = useState<Session[]>([])
+  const [scenarios, setScenarios] = useState<Scenario[]>([])
+  const [loadingSessions, setLoadingSessions] = useState(true)
+  const [loadingScenarios, setLoadingScenarios] = useState(true)
+
+  useEffect(() => {
+    if (!appUser?.uid) return
+    const uid = appUser.uid
+
+    fetch(`/api/sessions/by-instructor?instructorId=${uid}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setSessions)
+      .catch(() => setSessions([]))
+      .finally(() => setLoadingSessions(false))
+
+    fetch(`/api/scenarios/by-instructor?instructorId=${uid}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setScenarios)
+      .catch(() => setScenarios([]))
+      .finally(() => setLoadingScenarios(false))
+  }, [appUser?.uid])
+
+  const activeSessions = sessions.filter(s => s.status === 'active' || s.status === 'waiting')
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10 space-y-10">
@@ -30,7 +51,12 @@ export default function InstructorDashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {STATS.map(stat => (
+        {[
+          { label: 'Scenarios Created', value: loadingScenarios ? '…' : String(scenarios.length), icon: '📋', sub: scenarios.length === 0 ? 'Get started below' : `${scenarios.length} scenario${scenarios.length !== 1 ? 's' : ''}` },
+          { label: 'Sessions Launched', value: loadingSessions ? '…' : String(sessions.length), icon: '🚀', sub: sessions.length === 0 ? 'No sessions yet' : `${activeSessions.length} active` },
+          { label: 'Students Trained', value: '—', icon: '🎓', sub: 'Coming soon' },
+          { label: 'Avg Completion', value: '—', icon: '📈', sub: 'No data yet' },
+        ].map(stat => (
           <div key={stat.label} className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-slate-500 text-xs font-medium uppercase tracking-wider">{stat.label}</span>
@@ -61,6 +87,98 @@ export default function InstructorDashboard() {
         </div>
       </Link>
 
+      {/* Scenario Library + Sessions side by side */}
+      <div className="grid md:grid-cols-2 gap-6">
+
+        {/* Scenario Library */}
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/50">
+            <h2 className="text-sm font-semibold text-white">Scenario Library</h2>
+            <Link href="/instructor/create" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
+              + Create
+            </Link>
+          </div>
+          {loadingScenarios ? (
+            <div className="flex justify-center py-10">
+              <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+            </div>
+          ) : scenarios.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-14 px-6 text-center">
+              <div className="w-12 h-12 rounded-xl bg-slate-700/50 flex items-center justify-center text-2xl mb-3">📋</div>
+              <p className="text-sm font-medium text-slate-300 mb-1">No scenarios yet</p>
+              <p className="text-xs text-slate-500 max-w-xs">Your AI-generated scenarios will appear here.</p>
+              <Link href="/instructor/create" className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors">
+                Create First Scenario
+              </Link>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-700/30">
+              {scenarios.map(s => (
+                <div key={s.id} className="px-5 py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-200 truncate">{s.title}</p>
+                    <p className="text-xs text-slate-500 capitalize">{s.difficulty} · {s.tasks?.length ?? 0} tasks</p>
+                  </div>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    s.status === 'published' ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-400'
+                  }`}>
+                    {s.status ?? 'draft'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Recent Sessions */}
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/50">
+            <h2 className="text-sm font-semibold text-white">Recent Sessions</h2>
+            <span className="text-xs text-slate-600">Live & completed</span>
+          </div>
+          {loadingSessions ? (
+            <div className="flex justify-center py-10">
+              <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+            </div>
+          ) : sessions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-14 px-6 text-center">
+              <div className="w-12 h-12 rounded-xl bg-slate-700/50 flex items-center justify-center text-2xl mb-3">🚀</div>
+              <p className="text-sm font-medium text-slate-300 mb-1">No sessions launched</p>
+              <p className="text-xs text-slate-500 max-w-xs">Once you create a scenario and launch a session, it will appear here.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-700/30">
+              {sessions.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => router.push(`/session/${s.id}/monitor`)}
+                  className="w-full px-5 py-3 flex items-center gap-3 hover:bg-slate-700/30 transition-colors text-left"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-white bg-slate-700 px-2 py-0.5 rounded">
+                        {s.accessCode}
+                      </span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        s.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                        s.status === 'waiting' ? 'bg-yellow-500/20 text-yellow-400' :
+                        s.status === 'paused' ? 'bg-orange-500/20 text-orange-400' :
+                        'bg-slate-700 text-slate-400'
+                      }`}>
+                        {s.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">{s.mode} · {s.timeLimit}min</p>
+                  </div>
+                  <span className="text-slate-600 text-xs">→</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+      </div>
+
       {/* Subjects */}
       <div>
         <div className="flex items-center justify-between mb-4">
@@ -89,79 +207,6 @@ export default function InstructorDashboard() {
                 <p className="text-xs text-slate-500">{subject.topics.length} topics</p>
               </div>
             </Link>
-          ))}
-        </div>
-      </div>
-
-      {/* Scenario Library + Sessions side by side */}
-      <div className="grid md:grid-cols-2 gap-6">
-
-        {/* Scenario Library */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/50">
-            <h2 className="text-sm font-semibold text-white">Scenario Library</h2>
-            <Link
-              href="/instructor/create"
-              className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-            >
-              + Create
-            </Link>
-          </div>
-          <div className="flex flex-col items-center justify-center py-14 px-6 text-center">
-            <div className="w-12 h-12 rounded-xl bg-slate-700/50 flex items-center justify-center text-2xl mb-3">
-              📋
-            </div>
-            <p className="text-sm font-medium text-slate-300 mb-1">No scenarios yet</p>
-            <p className="text-xs text-slate-500 max-w-xs">
-              Your AI-generated scenarios will appear here. Create your first one to get started.
-            </p>
-            <Link
-              href="/instructor/create"
-              className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors"
-            >
-              Create First Scenario
-            </Link>
-          </div>
-        </div>
-
-        {/* Recent Sessions */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/50">
-            <h2 className="text-sm font-semibold text-white">Recent Sessions</h2>
-            <span className="text-xs text-slate-600">Live & completed</span>
-          </div>
-          <div className="flex flex-col items-center justify-center py-14 px-6 text-center">
-            <div className="w-12 h-12 rounded-xl bg-slate-700/50 flex items-center justify-center text-2xl mb-3">
-              🚀
-            </div>
-            <p className="text-sm font-medium text-slate-300 mb-1">No sessions launched</p>
-            <p className="text-xs text-slate-500 max-w-xs">
-              Once you create a scenario and launch a session, it will appear here with live stats.
-            </p>
-          </div>
-        </div>
-
-      </div>
-
-      {/* How it works */}
-      <div className="border border-slate-700/50 rounded-xl p-6">
-        <h2 className="text-sm font-semibold text-white mb-5">How It Works</h2>
-        <div className="grid md:grid-cols-4 gap-4">
-          {[
-            { step: '1', title: 'Pick a subject & topic', desc: 'Choose from 7 subjects and 35 topics', icon: '📚' },
-            { step: '2', title: 'Answer 5 questions', desc: 'Tell the AI the focus, difficulty, and context', icon: '💬' },
-            { step: '3', title: 'AI generates the scenario', desc: 'Complete story, tasks, evidence files, and events in ~30 seconds', icon: '✨' },
-            { step: '4', title: 'Launch & watch', desc: 'Teams compete live on the leaderboard while you monitor', icon: '🏆' },
-          ].map(item => (
-            <div key={item.step} className="flex gap-3">
-              <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
-                {item.step}
-              </div>
-              <div>
-                <p className="text-sm font-medium text-slate-200">{item.title}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{item.desc}</p>
-              </div>
-            </div>
           ))}
         </div>
       </div>

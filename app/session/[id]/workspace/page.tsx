@@ -250,12 +250,17 @@ function TeamChat({
   const [messages, setMessages] = useState<ChatMessage[]>([])
 
   useEffect(() => {
-    const unsub = onChatChange(sessionId, data => {
-      const msgs = Object.entries(data).map(([id, m]) => ({ ...m, id })) as ChatMessage[]
-      msgs.sort((a, b) => (a.sentAt ?? 0) - (b.sentAt ?? 0))
-      setMessages(msgs.slice(-50))
-    })
-    return unsub
+    let unsub: (() => void) | undefined
+    try {
+      unsub = onChatChange(sessionId, data => {
+        const msgs = Object.entries(data).map(([id, m]) => ({ ...m, id })) as ChatMessage[]
+        msgs.sort((a, b) => (a.sentAt ?? 0) - (b.sentAt ?? 0))
+        setMessages(msgs.slice(-50))
+      })
+    } catch (e) {
+      console.error('[chat] RTDB unavailable:', e)
+    }
+    return () => unsub?.()
   }, [sessionId])
 
   const send = async () => {
