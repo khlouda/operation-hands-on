@@ -50,9 +50,9 @@ export async function register(
     createdAt: Date.now(),
   }
 
-  // Save profile in background — don't block registration on it
+  // Save profile — await so it's definitely in Firestore before redirect
   onProgress?.('Finishing up…')
-  fetch('/api/users/create', {
+  await fetch('/api/users/create', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(user),
@@ -66,11 +66,25 @@ export async function register(
   return user
 }
 
-export async function login(email: string, password: string): Promise<User> {
+export async function login(email: string, password: string): Promise<{ user: User; role: import('@/lib/types').UserRole }> {
   const credential = await signInWithEmailAndPassword(auth(), email, password)
   const token = await credential.user.getIdToken()
   setAuthCookie(token)
-  return credential.user
+
+  // Fetch Firestore profile to get the correct role
+  let role: import('@/lib/types').UserRole = (localStorage.getItem('userRole') as import('@/lib/types').UserRole) ?? 'student'
+  try {
+    const profile = await Promise.race([
+      getUser(credential.user.uid),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), 4000)),
+    ])
+    if (profile?.role) {
+      role = profile.role
+      localStorage.setItem('userRole', role)
+    }
+  } catch { /* keep localStorage fallback */ }
+
+  return { user: credential.user, role }
 }
 
 export async function logout(): Promise<void> {

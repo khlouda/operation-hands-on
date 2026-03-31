@@ -18,9 +18,7 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      await login(email, password)
-      // Use stored role for instant redirect — Firestore profile loads in background
-      const role = localStorage.getItem('userRole')
+      const { role } = await login(email, password)
       router.push(role === 'instructor' ? '/instructor' : '/dashboard')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''
