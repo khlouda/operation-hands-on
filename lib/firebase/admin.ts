@@ -8,6 +8,6 @@ function getAdminApp() {
 }
 
 export function adminDb() {
-  getAdminApp()
-  return getFirestore()
+  const app = getAdminApp()
+  return getFirestore(app)
 }
