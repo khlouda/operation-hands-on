@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { generateScenarioStream } from '@/lib/ai/generate-scenario'
-import { createScenario } from '@/lib/firebase/firestore'
+import { adminCreateScenario } from '@/lib/firebase/firestore-admin'
 import type { GenerationParams } from '@/lib/types'
 
 // Streaming POST — keeps connection alive so Vercel's 10s limit doesn't kill it
@@ -40,22 +40,27 @@ export async function POST(req: NextRequest) {
         // Parse the accumulated JSON
         const { cleanAndParseJson } = await import('@/lib/ai/generate-scenario')
         const scenario = cleanAndParseJson(fullText)
-        const tempId = `scenario_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        const tempId = `scenario_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` // fallback if Firestore fails
         const finalScenario = { ...scenario, id: tempId }
 
-        // Save to Firestore in background
-        createScenario({
-          ...scenario,
-          subjectId: params.subject,
-          topicId: params.topic,
-          createdBy: params.answers._instructorId ?? 'unknown',
-          timesUsed: 0,
-          avgScore: 0,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        }).catch(err => console.error('[generate-scenario] Firestore save failed:', err))
+        // Save to Firestore with Admin SDK
+        let scenarioId = tempId
+        try {
+          scenarioId = await adminCreateScenario({
+            ...scenario,
+            subjectId: params.subject,
+            topicId: params.topic,
+            createdBy: params.answers._instructorId ?? 'unknown',
+            timesUsed: 0,
+            avgScore: 0,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          })
+        } catch (err) {
+          console.error('[generate-scenario] Firestore save failed:', err)
+        }
 
-        send({ type: 'done', scenarioId: tempId, scenario: finalScenario })
+        send({ type: 'done', scenarioId, scenario: { ...finalScenario, id: scenarioId } })
       } catch (err) {
         send({ type: 'error', message: err instanceof Error ? err.message : 'Generation failed' })
       } finally {

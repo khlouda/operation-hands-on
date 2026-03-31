@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createSession } from '@/lib/firebase/firestore'
+import { adminCreateSession } from '@/lib/firebase/firestore-admin'
 import type { SessionSettings } from '@/lib/types'
 
 function generateAccessCode(): string {
@@ -30,9 +30,7 @@ export async function POST(req: NextRequest) {
 
     const accessCode = generateAccessCode()
 
-    const tempSessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-
-    createSession({
+    const sessionId = await adminCreateSession({
       scenarioId,
       instructorId,
       mode: mode ?? 'competitive',
@@ -41,13 +39,9 @@ export async function POST(req: NextRequest) {
       teamIds: [],
       settings,
       accessCode,
-    }).then(id => {
-      console.log('[sessions/create] Firestore saved, id:', id)
-    }).catch(err => {
-      console.error('[sessions/create] Firestore save failed (non-fatal):', err)
     })
 
-    return NextResponse.json({ sessionId: tempSessionId, accessCode })
+    return NextResponse.json({ sessionId, accessCode })
   } catch (err) {
     console.error('[sessions/create]', err)
     return NextResponse.json({ error: 'Failed to create session' }, { status: 500 })
