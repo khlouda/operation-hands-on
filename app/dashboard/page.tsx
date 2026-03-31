@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
 import { logout } from '@/lib/firebase/auth'
-import { getSessionByCode } from '@/lib/firebase/firestore'
 import { SUBJECTS } from '@/constants/subjects'
 
 export default function StudentDashboard() {
@@ -29,8 +28,9 @@ export default function StudentDashboard() {
     setJoinError('')
     setJoining(true)
     try {
-      const session = await getSessionByCode(accessCode.toUpperCase().trim())
-      if (!session) { setJoinError('Session not found. Check your access code.'); return }
+      const res = await fetch(`/api/sessions/by-code?code=${encodeURIComponent(accessCode.toUpperCase().trim())}`)
+      if (!res.ok) { setJoinError('Session not found. Check your access code.'); return }
+      const session = await res.json()
       if (session.status === 'ended') { setJoinError('This session has already ended.'); return }
       router.push(`/session/${session.id}/lobby`)
     } catch {

@@ -37,3 +37,9 @@ export async function adminGetSession(id: string): Promise<Session | null> {
   const snap = await adminDb().collection('sessions').doc(id).get()
   return snap.exists ? (snap.data() as Session) : null
 }
+
+export async function adminGetSessionByCode(accessCode: string): Promise<Session | null> {
+  const snap = await adminDb().collection('sessions').where('accessCode', '==', accessCode).limit(1).get()
+  if (snap.empty) return null
+  return snap.docs[0].data() as Session
+}

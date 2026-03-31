@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
-import { getSession, getScenario, createSubmission } from '@/lib/firebase/firestore'
+import { createSubmission } from '@/lib/firebase/firestore'
 import { markTaskComplete, pushEvent, setMemberOnline, sendChatMessage, onChatChange } from '@/lib/firebase/rtdb'
 import LiveLeaderboard from '@/components/shared/LiveLeaderboard'
 import SessionTimer from '@/components/shared/SessionTimer'
@@ -324,10 +324,12 @@ export default function WorkspacePage() {
     if (!id || !appUser) return
     const load = async () => {
       try {
-        const s = await getSession(id)
-        if (!s) { router.push('/dashboard'); return }
+        const sRes = await fetch(`/api/sessions/${id}`)
+        if (!sRes.ok) { router.push('/dashboard'); return }
+        const s = await sRes.json()
         setSession(s)
-        const sc = await getScenario(s.scenarioId)
+        const scRes = await fetch(`/api/scenarios/${s.scenarioId}`)
+        const sc = scRes.ok ? await scRes.json() : null
         setScenario(sc)
         if (sc?.tasks?.length) setActiveTaskId(sc.tasks[0].id)
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { getSession, getScenario, updateSession } from '@/lib/firebase/firestore'
+import { updateSession } from '@/lib/firebase/firestore'
 import { onTeamsChange, onEventsChange, startLiveSession, markInjectFired } from '@/lib/firebase/rtdb'
 import LiveLeaderboard from '@/components/shared/LiveLeaderboard'
 import SessionTimer from '@/components/shared/SessionTimer'
@@ -26,19 +26,13 @@ export default function SessionMonitor() {
     if (!id) return
     const load = async () => {
       try {
-        let s = await getSession(id).catch(() => null)
-        if (!s) {
-          // Firestore unavailable — try local cache
-          try { s = JSON.parse(sessionStorage.getItem(`session_${id}`) ?? 'null') } catch { /* ignore */ }
-        }
-        if (!s) return
+        const sRes = await fetch(`/api/sessions/${id}`)
+        if (!sRes.ok) return
+        const s = await sRes.json()
         setSession(s)
 
-        let sc = await getScenario(s.scenarioId).catch(() => null)
-        if (!sc) {
-          try { sc = JSON.parse(sessionStorage.getItem(`scenario_${s.scenarioId}`) ?? 'null') } catch { /* ignore */ }
-        }
-        setScenario(sc)
+        const scRes = await fetch(`/api/scenarios/${s.scenarioId}`)
+        if (scRes.ok) setScenario(await scRes.json())
       } finally {
         setLoading(false)
       }

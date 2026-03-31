@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
-import { getSession, getScenario } from '@/lib/firebase/firestore'
 import type { Session, Scenario } from '@/lib/types'
 
 const DIFFICULTY_COLOR: Record<string, string> = {
@@ -27,12 +26,13 @@ export default function LobbyPage() {
     if (!id) return
     const load = async () => {
       try {
-        const s = await getSession(id)
-        if (!s) { router.push('/dashboard'); return }
+        const sRes = await fetch(`/api/sessions/${id}`)
+        if (!sRes.ok) { router.push('/dashboard'); return }
+        const s = await sRes.json()
         setSession(s)
         if (s.scenarioId) {
-          const sc = await getScenario(s.scenarioId)
-          setScenario(sc)
+          const scRes = await fetch(`/api/scenarios/${s.scenarioId}`)
+          if (scRes.ok) setScenario(await scRes.json())
         }
       } finally {
         setLoading(false)

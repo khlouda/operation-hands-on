@@ -24,33 +24,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let unsub: (() => void) | undefined
 
-    import('@/lib/firebase/auth').then(({ onAuthChange, getAppUser }) => {
+    import('@/lib/firebase/auth').then(({ onAuthChange }) => {
       unsub = onAuthChange(async user => {
         setFirebaseUser(user)
 
         if (user) {
           try {
-            // Try Firestore profile, but fall back to basic Firebase Auth data
-            const profile = await Promise.race([
-              getAppUser(user.uid),
-              new Promise<null>(resolve => setTimeout(() => resolve(null), 5000)),
-            ])
-
-            if (profile) {
+            const res = await fetch(`/api/users/${user.uid}`)
+            if (res.ok) {
+              const profile = await res.json()
               setAppUser(profile)
+              localStorage.setItem('userRole', profile.role)
             } else {
-              // Firestore slow/unavailable — build minimal profile from Auth + localStorage
-              const storedRole = (typeof window !== 'undefined' && localStorage.getItem('userRole')) as import('@/lib/types').UserRole | null
-              setAppUser({
-                uid: user.uid,
-                email: user.email ?? '',
-                displayName: user.displayName ?? 'User',
-                role: storedRole ?? 'student',
-                avatarColor: '#3b82f6',
-                university: 'ECPI University',
-                subjectInterests: [],
-                createdAt: Date.now(),
-              })
+              setAppUser(null)
             }
           } catch {
             setAppUser(null)
