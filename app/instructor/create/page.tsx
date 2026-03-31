@@ -375,7 +375,8 @@ function Step4({
             onComplete(msg.scenario)
             return
           } else if (msg.type === 'error') {
-            throw new Error(msg.message ?? 'Generation failed')
+            const m = msg.message ?? 'Generation failed'
+            throw new Error(m.includes('overloaded') ? 'Claude is temporarily busy — please try again in a moment.' : m)
           }
         }
       }

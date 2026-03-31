@@ -30,11 +30,27 @@ export async function POST(req: NextRequest) {
 
       try {
         let fullText = ''
-        const gen = generateScenarioStream(params)
+        let gen = generateScenarioStream(params)
 
-        for await (const chunk of gen) {
-          fullText += chunk
-          send({ type: 'chunk', text: chunk })
+        // Retry once on overloaded error
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            for await (const chunk of gen) {
+              fullText += chunk
+              send({ type: 'chunk', text: chunk })
+            }
+            break // success
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            if (attempt === 0 && msg.includes('overloaded')) {
+              send({ type: 'chunk', text: '' }) // keep connection alive
+              await new Promise(r => setTimeout(r, 8000))
+              fullText = ''
+              gen = generateScenarioStream(params)
+            } else {
+              throw err
+            }
+          }
         }
 
         // Parse the accumulated JSON
