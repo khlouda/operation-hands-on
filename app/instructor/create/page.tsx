@@ -327,12 +327,15 @@ function Step4({
   params: GenerationParams
   onComplete: (scenario: Scenario) => void
 }) {
-  const [status, setStatus] = useState<'idle' | 'generating' | 'done' | 'error'>('idle')
+  const [status, setStatus] = useState<'idle' | 'generating' | 'retrying' | 'done' | 'error'>('idle')
   const [streamText, setStreamText] = useState('')
   const [error, setError] = useState('')
+  const [retryCount, setRetryCount] = useState(0)
+  const [countdown, setCountdown] = useState(0)
   const started = useRef(false)
+  const MAX_RETRIES = 4
 
-  const generate = async () => {
+  const generate = async (attempt: number = 0) => {
     if (started.current) return
     started.current = true
     setStatus('generating')
@@ -375,8 +378,23 @@ function Step4({
             onComplete(msg.scenario)
             return
           } else if (msg.type === 'error') {
-            const m = msg.message ?? 'Generation failed'
-            throw new Error(m.includes('overloaded') ? 'Claude is temporarily busy — please try again in a moment.' : m)
+            if (msg.message === 'overloaded' && attempt < MAX_RETRIES) {
+              started.current = false
+              const waitSec = 5 + attempt * 3
+              setRetryCount(attempt + 1)
+              setCountdown(waitSec)
+              setStatus('retrying')
+              // countdown display
+              for (let s = waitSec - 1; s >= 0; s--) {
+                await new Promise(r => setTimeout(r, 1000))
+                setCountdown(s)
+              }
+              generate(attempt + 1)
+              return
+            }
+            throw new Error(msg.message === 'overloaded'
+              ? 'Claude is overloaded right now. Please try again in a few minutes.'
+              : (msg.message ?? 'Generation failed'))
           }
         }
       }
@@ -396,11 +414,22 @@ function Step4({
           Takes about 20–30 seconds.
         </p>
         <button
-          onClick={generate}
+          onClick={() => generate(0)}
           className="px-8 py-4 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-500 transition-colors text-lg"
         >
           Generate Scenario
         </button>
+      </div>
+    )
+  }
+
+  if (status === 'retrying') {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="text-4xl mb-6">⏳</div>
+        <h2 className="text-xl font-bold text-white mb-2">Claude is busy — retrying…</h2>
+        <p className="text-slate-400 text-sm mb-2">Attempt {retryCount} of {MAX_RETRIES}</p>
+        <p className="text-slate-500 text-sm">Retrying in <span className="text-blue-400 font-bold">{countdown}s</span></p>
       </div>
     )
   }
@@ -444,7 +473,7 @@ function Step4({
         <h2 className="text-xl font-bold text-white mb-2">Generation failed</h2>
         <p className="text-red-400 text-sm mb-6">{error}</p>
         <button
-          onClick={() => { started.current = false; setStatus('idle') }}
+          onClick={() => { started.current = false; setRetryCount(0); setStatus('idle') }}
           className="px-6 py-3 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-500"
         >
           Try Again

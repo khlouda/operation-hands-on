@@ -30,27 +30,10 @@ export async function POST(req: NextRequest) {
 
       try {
         let fullText = ''
-        let gen = generateScenarioStream(params)
 
-        // Retry once on overloaded error
-        for (let attempt = 0; attempt < 2; attempt++) {
-          try {
-            for await (const chunk of gen) {
-              fullText += chunk
-              send({ type: 'chunk', text: chunk })
-            }
-            break // success
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err)
-            if (attempt === 0 && msg.includes('overloaded')) {
-              send({ type: 'chunk', text: '' }) // keep connection alive
-              await new Promise(r => setTimeout(r, 8000))
-              fullText = ''
-              gen = generateScenarioStream(params)
-            } else {
-              throw err
-            }
-          }
+        for await (const chunk of generateScenarioStream(params)) {
+          fullText += chunk
+          send({ type: 'chunk', text: chunk })
         }
 
         // Parse the accumulated JSON
@@ -78,7 +61,9 @@ export async function POST(req: NextRequest) {
 
         send({ type: 'done', scenarioId, scenario: { ...finalScenario, id: scenarioId } })
       } catch (err) {
-        send({ type: 'error', message: err instanceof Error ? err.message : 'Generation failed' })
+        const msg = err instanceof Error ? err.message : String(err)
+        const isOverloaded = msg.toLowerCase().includes('overloaded')
+        send({ type: 'error', message: isOverloaded ? 'overloaded' : msg })
       } finally {
         controller.close()
       }
