@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { onTeamsChange, onEventsChange, startLiveSession, markInjectFired } from '@/lib/firebase/rtdb'
+import LiveLeaderboard from '@/components/shared/LiveLeaderboard'
+import SessionTimer from '@/components/shared/SessionTimer'
+import type { Session, Scenario, LiveTeam, LiveEvent, InjectEvent } from '@/lib/types'
 
 async function updateSession(sessionId: string, data: object) {
   await fetch(`/api/sessions/${sessionId}`, {
@@ -11,9 +14,6 @@ async function updateSession(sessionId: string, data: object) {
     body: JSON.stringify(data),
   })
 }
-import LiveLeaderboard from '@/components/shared/LiveLeaderboard'
-import SessionTimer from '@/components/shared/SessionTimer'
-import type { Session, Scenario, LiveTeam, LiveEvent, InjectEvent } from '@/lib/types'
 
 export default function SessionMonitor() {
   const { id } = useParams<{ id: string }>()
