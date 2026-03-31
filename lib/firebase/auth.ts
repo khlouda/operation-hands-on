@@ -71,19 +71,17 @@ export async function login(email: string, password: string): Promise<{ user: Us
   const token = await credential.user.getIdToken()
   setAuthCookie(token)
 
-  // Fetch Firestore profile to get the correct role
-  let role: import('@/lib/types').UserRole = (localStorage.getItem('userRole') as import('@/lib/types').UserRole) ?? 'student'
+  // Fetch profile via Admin SDK endpoint — bypasses Firestore security rules
+  let role: import('@/lib/types').UserRole = 'student'
   try {
-    const profile = await Promise.race([
-      getUser(credential.user.uid),
-      new Promise<null>(resolve => setTimeout(() => resolve(null), 4000)),
-    ])
-    if (profile?.role) {
-      role = profile.role
-      localStorage.setItem('userRole', role)
+    const res = await fetch(`/api/users/${credential.user.uid}`)
+    if (res.ok) {
+      const profile = await res.json()
+      if (profile?.role) role = profile.role
     }
-  } catch { /* keep localStorage fallback */ }
+  } catch { /* keep default */ }
 
+  localStorage.setItem('userRole', role)
   return { user: credential.user, role }
 }
 
