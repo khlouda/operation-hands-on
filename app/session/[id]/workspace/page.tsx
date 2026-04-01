@@ -42,11 +42,15 @@ function TaskPanel({
       {tasks.map((task, i) => {
         const done = completedTaskIds.includes(task.id)
         const active = activeTaskId === task.id
+        // A task is locked if it has an unlockCondition task ID that isn't completed yet
+        const locked = !done && !!task.unlockCondition && !completedTaskIds.includes(task.unlockCondition)
         return (
           <button
             key={task.id}
-            onClick={() => onSelectTask(task.id)}
+            onClick={() => !locked && onSelectTask(task.id)}
+            disabled={locked}
             className={`w-full text-left p-3 rounded-lg border transition-all ${
+              locked ? 'border-slate-800 bg-slate-900/30 opacity-50 cursor-not-allowed' :
               done ? 'border-green-500/30 bg-green-500/5' :
               active ? 'border-blue-500 bg-blue-500/10' :
               'border-slate-700/50 bg-slate-800/50 hover:border-slate-600'
@@ -54,16 +58,23 @@ function TaskPanel({
           >
             <div className="flex items-center gap-2">
               <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                locked ? 'bg-slate-800 text-slate-600' :
                 done ? 'bg-green-500 text-white' :
                 active ? 'bg-blue-500 text-white' :
                 'bg-slate-700 text-slate-400'
               }`}>
-                {done ? '✓' : i + 1}
+                {locked ? '🔒' : done ? '✓' : i + 1}
               </div>
-              <span className={`text-sm font-medium truncate ${done ? 'text-green-400' : active ? 'text-blue-300' : 'text-slate-300'}`}>
+              <span className={`text-sm font-medium truncate ${
+                locked ? 'text-slate-600' :
+                done ? 'text-green-400' :
+                active ? 'text-blue-300' : 'text-slate-300'
+              }`}>
                 {task.title}
               </span>
-              <span className="ml-auto text-xs text-yellow-400 font-medium flex-shrink-0">{task.points}p</span>
+              <span className={`ml-auto text-xs font-medium flex-shrink-0 ${locked ? 'text-slate-700' : 'text-yellow-400'}`}>
+                {task.points}p
+              </span>
             </div>
           </button>
         )
@@ -120,12 +131,14 @@ function TaskDetail({
   task,
   isCompleted,
   onSubmit,
+  onUseHint,
   submitting,
   lastResult,
 }: {
   task: Task
   isCompleted: boolean
   onSubmit: (answer: string) => void
+  onUseHint: (cost: number) => void
   submitting: boolean
   lastResult: 'correct' | 'wrong' | null
 }) {
@@ -165,7 +178,11 @@ function TaskDetail({
             ))}
             {hintIndex < task.hints.length - 1 && (
               <button
-                onClick={() => setHintIndex(h => h + 1)}
+                onClick={() => {
+                  const cost = task.hints[hintIndex + 1]?.pointsCost ?? 25
+                  setHintIndex(h => h + 1)
+                  onUseHint(cost)
+                }}
                 className="text-xs text-slate-500 hover:text-yellow-400 transition-colors flex items-center gap-1.5"
               >
                 <span>💡</span>
@@ -343,7 +360,11 @@ export default function WorkspacePage() {
         const scRes = await fetch(`/api/scenarios/${s.scenarioId}`)
         const sc = scRes.ok ? await scRes.json() : null
         setScenario(sc)
-        if (sc?.tasks?.length) setActiveTaskId(sc.tasks[0].id)
+        if (sc?.tasks?.length) {
+          // Start on the first unlocked task
+          const firstUnlocked = sc.tasks.find((t: import('@/lib/types').Task) => !t.unlockCondition)
+          setActiveTaskId((firstUnlocked ?? sc.tasks[0]).id)
+        }
 
         // Register player in RTDB
         setMemberOnline(id, appUser.uid, appUser.uid, true).catch(() => {})
@@ -413,6 +434,12 @@ export default function WorkspacePage() {
       if (next) setTimeout(() => { setActiveTaskId(next.id); setLastResult(null) }, 1200)
     } else {
       setLastResult('wrong')
+      const penalty = session.settings?.wrongAnswerPenalty ?? 0
+      if (penalty > 0) {
+        const penalizedScore = Math.max(0, score - penalty)
+        setScore(penalizedScore)
+        markTaskComplete(id, appUser.uid, '__penalty__', penalizedScore).catch(() => {})
+      }
       pushEvent(id, {
         type: 'wrong_answer', teamId: appUser.uid,
         teamName: appUser.displayName, teamColor: appUser.avatarColor,
@@ -420,6 +447,17 @@ export default function WorkspacePage() {
       }).catch(() => {})
     }
     setSubmitting(false)
+  }
+
+  const handleUseHint = (cost: number) => {
+    const newScore = Math.max(0, score - cost)
+    setScore(newScore)
+    markTaskComplete(id, appUser?.uid ?? '', '__hint__', newScore).catch(() => {})
+    pushEvent(id, {
+      type: 'hint_used', teamId: appUser?.uid ?? '',
+      teamName: appUser?.displayName ?? '', teamColor: appUser?.avatarColor ?? '',
+      payload: { cost },
+    }).catch(() => {})
   }
 
   if (loading) {
@@ -610,6 +648,7 @@ export default function WorkspacePage() {
               task={activeTask}
               isCompleted={completedTaskIds.includes(activeTask.id)}
               onSubmit={handleSubmit}
+              onUseHint={handleUseHint}
               submitting={submitting}
               lastResult={lastResult}
             />

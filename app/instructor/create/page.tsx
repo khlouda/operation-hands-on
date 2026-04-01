@@ -516,6 +516,12 @@ function Step5({ scenario, params, instructorId, onRegenerate }: {
 
       setAccessCode(data.accessCode)
       setSessionId(data.sessionId)
+
+      // Initialize RTDB session structure so leaderboard/timer work immediately
+      try {
+        const { initLiveSession } = await import('@/lib/firebase/rtdb')
+        await initLiveSession(data.sessionId, params.timeLimit)
+      } catch { /* RTDB unavailable — live features will be limited */ }
     } catch {
       // still show success even if session creation fails
       setAccessCode('ERROR')

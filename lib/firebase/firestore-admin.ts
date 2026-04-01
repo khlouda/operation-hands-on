@@ -52,6 +52,29 @@ export async function adminCreateSubmission(submission: object): Promise<void> {
   await adminDb().collection('submissions').add(submission)
 }
 
+export async function adminGetSubmissionsByUser(userId: string): Promise<import('@/lib/types').Submission[]> {
+  const snap = await adminDb()
+    .collection('submissions')
+    .where('userId', '==', userId)
+    .orderBy('submittedAt', 'desc')
+    .limit(200)
+    .get()
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as import('@/lib/types').Submission))
+}
+
+export async function adminGetUniqueStudentCountForSessions(sessionIds: string[]): Promise<number> {
+  if (sessionIds.length === 0) return 0
+  // Firestore 'in' supports up to 30 values; chunk if needed
+  const chunks: string[][] = []
+  for (let i = 0; i < sessionIds.length; i += 30) chunks.push(sessionIds.slice(i, i + 30))
+  const userIds = new Set<string>()
+  for (const chunk of chunks) {
+    const snap = await adminDb().collection('submissions').where('sessionId', 'in', chunk).get()
+    snap.docs.forEach(d => { const uid = d.data().userId; if (uid) userIds.add(uid) })
+  }
+  return userIds.size
+}
+
 export async function adminGetSessionsByInstructor(instructorId: string): Promise<Session[]> {
   const snap = await adminDb()
     .collection('sessions')

@@ -16,6 +16,7 @@ export default function InstructorDashboard() {
   const [scenarios, setScenarios] = useState<Scenario[]>([])
   const [loadingSessions, setLoadingSessions] = useState(true)
   const [loadingScenarios, setLoadingScenarios] = useState(true)
+  const [studentCount, setStudentCount] = useState<number | null>(null)
 
   useEffect(() => {
     if (!appUser?.uid) return
@@ -23,8 +24,23 @@ export default function InstructorDashboard() {
 
     fetch(`/api/sessions/by-instructor?instructorId=${uid}`)
       .then(r => r.ok ? r.json() : [])
-      .then(setSessions)
-      .catch(() => setSessions([]))
+      .then((data: Session[]) => {
+        setSessions(data)
+        // Fetch unique student count for all sessions
+        if (data.length > 0) {
+          fetch('/api/sessions/students-count', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionIds: data.map(s => s.id) }),
+          })
+            .then(r => r.ok ? r.json() : { count: 0 })
+            .then(({ count }) => setStudentCount(count))
+            .catch(() => setStudentCount(0))
+        } else {
+          setStudentCount(0)
+        }
+      })
+      .catch(() => { setSessions([]); setStudentCount(0) })
       .finally(() => setLoadingSessions(false))
 
     fetch(`/api/scenarios/by-instructor?instructorId=${uid}`)
@@ -54,8 +70,8 @@ export default function InstructorDashboard() {
         {[
           { label: 'Scenarios Created', value: loadingScenarios ? '…' : String(scenarios.length), icon: '📋', sub: scenarios.length === 0 ? 'Get started below' : `${scenarios.length} scenario${scenarios.length !== 1 ? 's' : ''}` },
           { label: 'Sessions Launched', value: loadingSessions ? '…' : String(sessions.length), icon: '🚀', sub: sessions.length === 0 ? 'No sessions yet' : `${activeSessions.length} active` },
-          { label: 'Students Trained', value: '—', icon: '🎓', sub: 'Coming soon' },
-          { label: 'Avg Completion', value: '—', icon: '📈', sub: 'No data yet' },
+          { label: 'Students Trained', value: studentCount === null ? '…' : String(studentCount), icon: '🎓', sub: studentCount === null ? 'Loading…' : studentCount === 0 ? 'No submissions yet' : `unique student${studentCount !== 1 ? 's' : ''} across all sessions` },
+          { label: 'Active Sessions', value: loadingSessions ? '…' : String(activeSessions.length), icon: '📡', sub: activeSessions.length === 0 ? 'None running' : `${activeSessions.length} live right now` },
         ].map(stat => (
           <div key={stat.label} className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">

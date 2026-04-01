@@ -6,17 +6,45 @@ import { useAuth } from '@/lib/context/AuthContext'
 import { logout } from '@/lib/firebase/auth'
 import { SUBJECTS } from '@/constants/subjects'
 
+interface StudentStats {
+  sessionsCompleted: number
+  bestScore: number | null
+  totalCorrect: number
+}
+
 export default function StudentDashboard() {
   const { appUser, loading } = useAuth()
   const router = useRouter()
   const [accessCode, setAccessCode] = useState('')
   const [joining, setJoining] = useState(false)
   const [joinError, setJoinError] = useState('')
+  const [stats, setStats] = useState<StudentStats | null>(null)
 
   useEffect(() => {
     if (!loading && !appUser) router.push('/login')
     if (appUser?.role === 'instructor') router.push('/instructor')
   }, [appUser, loading, router])
+
+  useEffect(() => {
+    if (!appUser?.uid) return
+    fetch(`/api/submissions?userId=${appUser.uid}`)
+      .then(r => r.ok ? r.json() : [])
+      .then((submissions: { sessionId: string; isCorrect: boolean; pointsAwarded: number }[]) => {
+        const correct = submissions.filter(s => s.isCorrect)
+        // Group by session to find completed sessions (at least 1 correct) and best score
+        const scoreBySession: Record<string, number> = {}
+        for (const s of correct) {
+          scoreBySession[s.sessionId] = (scoreBySession[s.sessionId] ?? 0) + s.pointsAwarded
+        }
+        const sessionScores = Object.values(scoreBySession)
+        setStats({
+          sessionsCompleted: sessionScores.length,
+          bestScore: sessionScores.length > 0 ? Math.max(...sessionScores) : null,
+          totalCorrect: correct.length,
+        })
+      })
+      .catch(() => {})
+  }, [appUser?.uid])
 
   const handleLogout = async () => {
     await logout()
@@ -87,12 +115,26 @@ export default function StudentDashboard() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {[
-            { label: 'Sessions Completed', value: '0', icon: '🎯', sub: 'Join one below' },
-            { label: 'Best Score', value: '—', icon: '🏆', sub: 'No sessions yet' },
-            { label: 'Hints Used', value: '—', icon: '💡', sub: 'Fewer = more points' },
-            { label: 'Rank', value: '—', icon: '📊', sub: 'Complete a session' },
+            {
+              label: 'Sessions Completed',
+              value: stats === null ? '…' : String(stats.sessionsCompleted),
+              icon: '🎯',
+              sub: stats === null ? 'Loading…' : stats.sessionsCompleted === 0 ? 'Join one below' : `${stats.sessionsCompleted} session${stats.sessionsCompleted !== 1 ? 's' : ''}`,
+            },
+            {
+              label: 'Best Score',
+              value: stats === null ? '…' : stats.bestScore !== null ? String(stats.bestScore) : '—',
+              icon: '🏆',
+              sub: stats === null ? 'Loading…' : stats.bestScore !== null ? 'pts in a single session' : 'No sessions yet',
+            },
+            {
+              label: 'Tasks Solved',
+              value: stats === null ? '…' : String(stats.totalCorrect),
+              icon: '✅',
+              sub: stats === null ? 'Loading…' : stats.totalCorrect === 0 ? 'Complete your first task' : `correct answer${stats.totalCorrect !== 1 ? 's' : ''} submitted`,
+            },
           ].map(stat => (
             <div key={stat.label} className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
