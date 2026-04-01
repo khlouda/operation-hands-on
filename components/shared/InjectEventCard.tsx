@@ -21,7 +21,7 @@ export default function InjectEventCard({ sessionId }: Props) {
   const [current, setCurrent] = useState<FiredInject | null>(null)
   const seenRef = useRef<Set<string>>(new Set())
 
-  function db() { return app ? getDatabase(app) : null }
+  function db() { try { return app ? getDatabase(app) : null } catch { return null } }
 
   useEffect(() => {
     const database = db()

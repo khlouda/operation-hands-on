@@ -92,7 +92,8 @@ export default function SessionMonitor() {
       await markInjectFired(id, customId)
       // Write full inject data so the card renders correctly
       const { ref, set, getDatabase } = await import('firebase/database')
-      const db = getDatabase()
+      let db; try { db = getDatabase() } catch { return }
+      if (!db) return
       await set(ref(db, `sessions/${id}/firedInjects/${customId}`), {
         id: customId,
         title: customInject.title,
