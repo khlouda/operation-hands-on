@@ -28,7 +28,13 @@ Rules for every scenario:
 - Evidence files must look authentic — real Apache log formats, real config file syntax, realistic IP addresses (RFC 5737 ranges: 192.0.2.x, 198.51.100.x, 203.0.113.x).
 - Inject events must feel like real escalations — a boss demanding answers, new evidence surfacing, the situation getting worse.
 - Vary everything: company names, people names, IP addresses, timestamps. Never produce the same scenario twice.
-- Answers/flags must be specific enough to validate but not guessable without doing the work.
+- CRITICAL — Answer format rules (strictly enforced):
+  * Every correct answer MUST be a short, exact, specific value that a student can copy from the evidence files — e.g. an IP address, a timestamp, a filename, a username, a port number, a hash, a CVE number, a status code, a specific command, a line from a log.
+  * NEVER create tasks whose answer requires writing a sentence, paragraph, or summary. No "explain why…", no "describe what…", no "summarize…" questions.
+  * Every answer must be 1–5 words or a single value. Students must be able to type the exact answer found in the logs/config/artifact.
+  * Flag tasks: answer is a single extracted value (e.g. "192.0.2.47", "2024-03-15 03:42:17", "admin", "CVE-2024-1234").
+  * Command tasks: answer is the exact command to run (e.g. "netstat -tulpn", "grep -i 'failed' auth.log").
+  * Never use "text" type for open-ended analysis. Only use "text" type if the answer is still a short specific extractable string.
 
 Always respond with valid JSON only. No markdown fences. No explanatory text outside the JSON.`
 }
@@ -110,12 +116,13 @@ Return a JSON object with this exact structure:
 }
 
 Requirements:
-- Generate exactly 3 progressive tasks (each task unlocks understanding needed for the next)
-- Generate exactly 3 evidence files (2 useful, 1 distractor with isDistractor: true), max 20 lines of content each
+- Generate between 5 and 7 progressive tasks (each task unlocks understanding needed for the next)
+- Generate between 4 and 6 evidence files (at least 1 distractor with isDistractor: true), max 20 lines of content each
 - Generate exactly 2 inject events at different times
-- Task points should total around ${Math.round(params.timeLimit * 5)} points
-- For task types: use "flag" for finding a specific value, "text" for analysis/explanation, "command" for terminal tasks
-- Correct answers for flag tasks should be specific (e.g. "192.0.2.47", "2024-03-15 03:42:17", "CVE-2024-1234")
+- Task points should total around ${Math.round(params.timeLimit * 8)} points spread evenly across tasks
+- For task types: use "flag" for finding a specific extracted value, "command" for terminal/tool tasks
+- NEVER use "text" type for tasks requiring written summaries or explanations
+- All correct answers must be short exact values extractable from the evidence files (IP, timestamp, username, hash, filename, port, CVE ID, etc.)
 - Be concise — quality over length. Short story (2 paragraphs), short task descriptions (2-3 sentences each)`
 }
 

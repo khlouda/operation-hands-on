@@ -329,6 +329,7 @@ export default function WorkspacePage() {
   const [lastResult, setLastResult] = useState<'correct' | 'wrong' | null>(null)
   const [leftTab, setLeftTab] = useState<'tasks' | 'files'>('tasks')
   const [score, setScore] = useState(0)
+  const [sessionEnded, setSessionEnded] = useState(false)
 
   useEffect(() => {
     if (!id || !appUser) return
@@ -337,6 +338,7 @@ export default function WorkspacePage() {
         const sRes = await fetch(`/api/sessions/${id}`)
         if (!sRes.ok) { router.push('/dashboard'); return }
         const s = await sRes.json()
+        if (s.status === 'ended') { setSessionEnded(true) }
         setSession(s)
         const scRes = await fetch(`/api/scenarios/${s.scenarioId}`)
         const sc = scRes.ok ? await scRes.json() : null
@@ -359,6 +361,20 @@ export default function WorkspacePage() {
     load()
     return () => { setMemberOnline(id, appUser.uid, appUser.uid, false).catch(() => {}) }
   }, [id, appUser, router])
+
+  // Poll session status every 5s to detect when instructor ends the session
+  useEffect(() => {
+    if (!id || sessionEnded) return
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/sessions/${id}`)
+        if (!res.ok) return
+        const s = await res.json()
+        if (s.status === 'ended') { setSessionEnded(true); clearInterval(interval) }
+      } catch { /* ignore */ }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [id, sessionEnded])
 
   const handleSubmit = (answer: string) => {
     if (!scenario || !activeTaskId || !appUser || !session || submitting) return
@@ -416,6 +432,82 @@ export default function WorkspacePage() {
 
   if (!session || !scenario) {
     return <div className="min-h-screen bg-[#0a0d14] flex items-center justify-center text-slate-400">Session not found.</div>
+  }
+
+  const totalTasks = scenario.tasks?.length ?? 0
+  const allComplete = totalTasks > 0 && completedTaskIds.length >= totalTasks
+
+  // ── Session ended overlay ──────────────────────────────────────────────────
+  if (sessionEnded) {
+    return (
+      <div className="min-h-screen bg-[#0a0d14] flex items-center justify-center px-4">
+        <div className="max-w-md w-full text-center">
+          <div className="text-5xl mb-6">🏁</div>
+          <h1 className="text-2xl font-bold text-white mb-2">Session Ended</h1>
+          <p className="text-slate-400 text-sm mb-8">
+            The instructor has ended this session. Great work!
+          </p>
+          <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 mb-6 text-left space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-slate-400">Your Score</span>
+              <span className="text-xl font-bold text-yellow-400">{score} pts</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-slate-400">Tasks Completed</span>
+              <span className="text-sm font-bold text-white">{completedTaskIds.length} / {totalTasks}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-slate-400">Scenario</span>
+              <span className="text-sm text-slate-300 truncate max-w-[200px]">{scenario.title}</span>
+            </div>
+          </div>
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-colors"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── All tasks completed overlay ────────────────────────────────────────────
+  if (allComplete) {
+    return (
+      <div className="min-h-screen bg-[#0a0d14] flex items-center justify-center px-4">
+        <div className="max-w-md w-full text-center">
+          <div className="text-6xl mb-6 animate-bounce">🎉</div>
+          <h1 className="text-3xl font-bold text-white mb-2">Mission Complete!</h1>
+          <p className="text-slate-400 text-sm mb-8">
+            You&apos;ve completed all tasks. Outstanding work!
+          </p>
+          <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 mb-6 text-left space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-slate-400">Final Score</span>
+              <span className="text-xl font-bold text-yellow-400">{score} pts</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-slate-400">Tasks Completed</span>
+              <span className="text-sm font-bold text-green-400">{completedTaskIds.length} / {totalTasks} ✓</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-slate-400">Scenario</span>
+              <span className="text-sm text-slate-300 truncate max-w-[200px]">{scenario.title}</span>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 mb-6">
+            The session is still active — your instructor will end it when everyone is finished.
+          </p>
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl transition-colors"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    )
   }
 
   const activeTask = scenario.tasks?.find(t => t.id === activeTaskId) ?? null
