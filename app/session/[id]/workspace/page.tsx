@@ -132,6 +132,11 @@ function TaskDetail({
   const [answer, setAnswer] = useState('')
   const [hintIndex, setHintIndex] = useState(-1)
 
+  // Reset answer + hints when task changes
+  useEffect(() => { setAnswer(''); setHintIndex(-1) }, [task.id])
+  // Clear answer field after correct submit
+  useEffect(() => { if (lastResult === 'correct') setAnswer('') }, [lastResult])
+
   return (
     <div className="h-full flex flex-col p-6 overflow-y-auto">
       {/* Task header */}
@@ -355,26 +360,25 @@ export default function WorkspacePage() {
     return () => { setMemberOnline(id, appUser.uid, appUser.uid, false).catch(() => {}) }
   }, [id, appUser, router])
 
-  const handleSubmit = async (answer: string) => {
-    if (!scenario || !activeTaskId || !appUser || !session) return
+  const handleSubmit = (answer: string) => {
+    if (!scenario || !activeTaskId || !appUser || !session || submitting) return
     const task = scenario.tasks.find(t => t.id === activeTaskId)
     if (!task) return
 
     setSubmitting(true)
     const isCorrect = answer.toLowerCase().trim() === task.correctAnswer.toLowerCase().trim()
 
-    try {
-      await createSubmission({
-        sessionId: id,
-        teamId: appUser.uid,
-        userId: appUser.uid,
-        taskId: activeTaskId,
-        answer,
-        isCorrect,
+    // Save submission in background — never block feedback on this
+    fetch('/api/submissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: id, teamId: appUser.uid, userId: appUser.uid,
+        taskId: activeTaskId, answer, isCorrect,
         pointsAwarded: isCorrect ? task.points : 0,
         submittedAt: Date.now(),
-      })
-    } catch { /* non-blocking */ }
+      }),
+    }).catch(() => {})
 
     if (isCorrect) {
       setLastResult('correct')
@@ -382,28 +386,20 @@ export default function WorkspacePage() {
       const newCompleted = [...completedTaskIds, activeTaskId]
       setScore(newScore)
       setCompletedTaskIds(newCompleted)
-
-      // Sync to RTDB
       markTaskComplete(id, appUser.uid, activeTaskId, newScore).catch(() => {})
       pushEvent(id, {
-        type: 'task_complete',
-        teamId: appUser.uid,
-        teamName: appUser.displayName,
-        teamColor: appUser.avatarColor,
+        type: 'task_complete', teamId: appUser.uid,
+        teamName: appUser.displayName, teamColor: appUser.avatarColor,
         payload: { taskTitle: task.title, points: task.points },
       }).catch(() => {})
-
-      // Auto-advance to next task
       const idx = scenario.tasks.findIndex(t => t.id === activeTaskId)
       const next = scenario.tasks[idx + 1]
       if (next) setTimeout(() => { setActiveTaskId(next.id); setLastResult(null) }, 1200)
     } else {
       setLastResult('wrong')
       pushEvent(id, {
-        type: 'wrong_answer',
-        teamId: appUser.uid,
-        teamName: appUser.displayName,
-        teamColor: appUser.avatarColor,
+        type: 'wrong_answer', teamId: appUser.uid,
+        teamName: appUser.displayName, teamColor: appUser.avatarColor,
         payload: { taskTitle: task.title },
       }).catch(() => {})
     }

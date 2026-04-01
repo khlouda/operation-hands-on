@@ -48,6 +48,10 @@ export async function adminUpdateSession(id: string, data: Partial<Session>): Pr
   await adminDb().collection('sessions').doc(id).update(data)
 }
 
+export async function adminCreateSubmission(submission: object): Promise<void> {
+  await adminDb().collection('submissions').add(submission)
+}
+
 export async function adminGetSessionsByInstructor(instructorId: string): Promise<Session[]> {
   const snap = await adminDb()
     .collection('sessions')
