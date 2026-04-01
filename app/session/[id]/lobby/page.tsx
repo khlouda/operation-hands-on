@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
 import type { Session, Scenario } from '@/lib/types'
@@ -21,7 +21,9 @@ export default function LobbyPage() {
   const [scenario, setScenario] = useState<Scenario | null>(null)
   const [loading, setLoading] = useState(true)
   const [ready, setReady] = useState(false)
+  const registeredRef = useRef(false)
 
+  // Load session + scenario once
   useEffect(() => {
     if (!id) return
     const load = async () => {
@@ -30,6 +32,8 @@ export default function LobbyPage() {
         if (!sRes.ok) { router.push('/dashboard'); return }
         const s = await sRes.json()
         setSession(s)
+        // If session already active, go straight to workspace
+        if (s.status === 'active') { router.push(`/session/${id}/workspace`); return }
         if (s.scenarioId) {
           const scRes = await fetch(`/api/scenarios/${s.scenarioId}`)
           if (scRes.ok) setScenario(await scRes.json())
@@ -39,6 +43,45 @@ export default function LobbyPage() {
       }
     }
     load()
+  }, [id, router])
+
+  // Register student in RTDB so instructor can see them
+  useEffect(() => {
+    if (!id || !appUser || registeredRef.current) return
+    registeredRef.current = true
+    const register = async () => {
+      try {
+        const { initLiveTeam } = await import('@/lib/firebase/rtdb')
+        await initLiveTeam(id, {
+          id: appUser.uid,
+          score: 0,
+          rank: 0,
+          tasksCompleted: [],
+          lastActivity: Date.now(),
+          membersOnline: [appUser.uid],
+        })
+      } catch (e) {
+        console.warn('[lobby] RTDB register failed:', e)
+      }
+    }
+    register()
+  }, [id, appUser])
+
+  // Poll session status every 3s — redirect when instructor starts
+  useEffect(() => {
+    if (!id) return
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/sessions/${id}`)
+        if (!res.ok) return
+        const s = await res.json()
+        if (s.status === 'active') {
+          clearInterval(interval)
+          router.push(`/session/${id}/workspace`)
+        }
+      } catch { /* ignore */ }
+    }, 3000)
+    return () => clearInterval(interval)
   }, [id, router])
 
   if (loading) {
