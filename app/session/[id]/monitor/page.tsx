@@ -406,24 +406,40 @@ export default function SessionMonitor() {
           </div>
         )}
 
-        {/* Task list */}
+        {/* Task list — Answer Key */}
         <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-700/50">
-            <h2 className="text-sm font-semibold text-white">Tasks</h2>
+          <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-white">Tasks — Answer Key</h2>
+            <span className="text-xs text-slate-500 bg-slate-700/50 px-2 py-1 rounded-md">Instructor only</span>
           </div>
           <div className="divide-y divide-slate-700/50">
             {scenario.tasks?.map((task, i) => (
-              <div key={task.id} className="px-5 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <span className="w-6 h-6 rounded-full bg-slate-700 text-xs font-bold text-slate-300 flex items-center justify-center flex-shrink-0">
+              <div key={task.id} className="px-5 py-4">
+                <div className="flex items-start gap-4">
+                  <span className="w-6 h-6 rounded-full bg-slate-700 text-xs font-bold text-slate-300 flex items-center justify-center flex-shrink-0 mt-0.5">
                     {i + 1}
                   </span>
-                  <div>
-                    <p className="text-sm font-medium text-slate-200">{task.title}</p>
-                    <p className="text-xs text-slate-500">{task.hints?.length ?? 0} hints · {task.type}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-slate-200">{task.title}</p>
+                        {task.description && (
+                          <p className="text-xs text-slate-400 mt-1 leading-relaxed">{task.description}</p>
+                        )}
+                        <p className="text-xs text-slate-600 mt-1">{task.hints?.length ?? 0} hints · {task.type}</p>
+                      </div>
+                      <span className="text-sm font-bold text-yellow-400 flex-shrink-0">{task.points} pts</span>
+                    </div>
+                    {task.correctAnswer && (
+                      <div className="mt-3 flex items-center gap-2">
+                        <span className="text-xs text-slate-500 flex-shrink-0">Answer:</span>
+                        <span className="text-xs font-mono font-bold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-1 rounded-lg break-all">
+                          {task.correctAnswer}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <span className="text-sm font-bold text-yellow-400">{task.points} pts</span>
               </div>
             ))}
           </div>
