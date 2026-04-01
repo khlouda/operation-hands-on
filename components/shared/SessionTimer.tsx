@@ -23,7 +23,9 @@ export default function SessionTimer({ sessionId, initialSeconds, isInstructor, 
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const localRef = useRef(initialSeconds)
 
-  function db() { return app ? getDatabase(app) : null }
+  function db() {
+    try { return app ? getDatabase(app) : null } catch { return null }
+  }
 
   // Students: subscribe to RTDB timer
   useEffect(() => {

@@ -11,8 +11,14 @@ const firebaseConfig = {
 }
 
 // Only initialize if a real API key is present — prevents build-time errors
-export const app: FirebaseApp | null = firebaseConfig.apiKey
-  ? (getApps().length ? getApp() : initializeApp(firebaseConfig))
-  : null
+export const app: FirebaseApp | null = (() => {
+  if (!firebaseConfig.apiKey) return null
+  try {
+    return getApps().length ? getApp() : initializeApp(firebaseConfig)
+  } catch (e) {
+    console.error('[firebase/config] initializeApp failed:', e)
+    return null
+  }
+})()
 
 export default app

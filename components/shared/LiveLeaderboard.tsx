@@ -16,13 +16,18 @@ export default function LiveLeaderboard({ sessionId, currentUserId, compact }: P
   const [teams, setTeams] = useState<Array<{ id: string } & LiveTeam>>([])
 
   useEffect(() => {
-    const unsub = onTeamsChange(sessionId, data => {
-      const sorted = Object.entries(data)
-        .map(([id, t]) => ({ id, ...t }))
-        .sort((a, b) => b.score - a.score)
-      setTeams(sorted)
-    })
-    return unsub
+    let unsub: (() => void) | undefined
+    try {
+      unsub = onTeamsChange(sessionId, data => {
+        const sorted = Object.entries(data)
+          .map(([id, t]) => ({ id, ...t }))
+          .sort((a, b) => b.score - a.score)
+        setTeams(sorted)
+      })
+    } catch (e) {
+      console.error('[LiveLeaderboard] RTDB unavailable:', e)
+    }
+    return () => unsub?.()
   }, [sessionId])
 
   if (teams.length === 0) {
