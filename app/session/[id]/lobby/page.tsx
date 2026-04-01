@@ -106,9 +106,18 @@ export default function LobbyPage() {
     <div className="min-h-screen bg-[#0f1117] flex flex-col">
       {/* Nav */}
       <nav className="border-b border-slate-800 px-6 h-14 flex items-center justify-between max-w-5xl mx-auto w-full">
-        <span className="text-sm font-bold text-white tracking-tight">
-          Operation <span className="text-blue-400">Hands-On</span>
-        </span>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => router.push(appUser?.role === 'instructor' ? '/instructor' : '/dashboard')}
+            className="text-xs text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1"
+          >
+            ← Home
+          </button>
+          <span className="text-slate-700">|</span>
+          <span className="text-sm font-bold text-white tracking-tight">
+            Operation <span className="text-blue-400">Hands-On</span>
+          </span>
+        </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-500">Access Code:</span>
           <span className="font-mono text-sm font-bold text-white tracking-widest bg-slate-800 px-3 py-1 rounded-lg">

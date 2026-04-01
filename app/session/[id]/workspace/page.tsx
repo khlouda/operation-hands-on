@@ -430,6 +430,13 @@ export default function WorkspacePage() {
       {/* Top bar */}
       <div className="h-12 border-b border-slate-800 flex items-center justify-between px-4 flex-shrink-0">
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.push(appUser?.role === 'instructor' ? '/instructor' : '/dashboard')}
+            className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            ← Home
+          </button>
+          <span className="text-slate-700">|</span>
           <span className="text-xs font-bold text-white">Operation <span className="text-blue-400">Hands-On</span></span>
           <span className="text-slate-700">|</span>
           <span className="text-xs text-slate-300 font-medium truncate max-w-xs">{scenario.title}</span>
